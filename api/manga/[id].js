@@ -1,5 +1,6 @@
 const axios = require('axios');
-const cheerio = require('cheerio');
+
+const API_BASE_URL = 'https://api.mangadex.org';
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -8,47 +9,52 @@ module.exports = async (req, res) => {
 
   try {
     const { id } = req.query;
-    // UPDATED: New source website
-    const siteUrl = `https://weebcentral.com/manga/${id}`;
 
-    const { data } = await axios.get(siteUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
-      }
+    // --- Get Manga Details ---
+    const mangaResponse = await axios({
+      method: 'GET',
+      url: `${API_BASE_URL}/manga/${id}`,
+      params: {
+        'includes[]': ['cover_art', 'author'],
+      },
     });
 
-    const $ = cheerio.load(data);
+    const manga = mangaResponse.data.data;
 
-    // UPDATED: New selectors for weebcentral.com
-    const title = $('h1[class*="text-2xl"]').text().trim();
-    const coverImage = $('img[class*="rounded-md"][alt*="cover image"]').attr('src');
-    const description = $('p[class*="text-gray-300"]').first().text().trim();
+    // --- Get Chapter List ---
+    const chapterResponse = await axios({
+        method: 'GET',
+        url: `${API_BASE_URL}/manga/${id}/feed`,
+        params: {
+            limit: 500, // Get up to 500 chapters
+            order: { chapter: 'asc' }, // Order by chapter number, ascending
+            'translatedLanguage[]': ['en'] // Only get English chapters
+        }
+    });
+
+    // --- Process the Data ---
+    const author = manga.relationships.find(rel => rel.type === 'author')?.attributes.name || 'Unknown';
+    const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
+    const coverImage = `https://uploads.mangadex.org/covers/${manga.id}/${coverArt.attributes.fileName}`;
     
-    const genres = [];
-    $('div[class*="items-center"] a[href*="/genre/"]').each((i, el) => {
-      genres.push($(el).text().trim());
-    });
-
-    const chapters = [];
-    $('div[class*="col-span-1"] a[href*="/manga/"]').each((i, el) => {
-      const chapterId = $(el).attr('href')?.split('/').pop();
-      const chapterTitle = $(el).find('div').first().text().trim();
-      chapters.push({ chapterTitle, chapterId });
-    });
+    const chapters = chapterResponse.data.data.map(chap => ({
+        chapterId: chap.id,
+        chapterTitle: `Chapter ${chap.attributes.chapter}` + (chap.attributes.title ? `: ${chap.attributes.title}`: '')
+    }));
 
     res.status(200).json({
-      id,
-      title,
-      author: 'N/A', // Author info is not easily available on this site
-      status: 'N/A', // Status info is not easily available on this site
-      genres,
-      description,
-      coverImage,
-      chapters: chapters.reverse(), // Reverse to show Chapter 1 first
+      id: manga.id,
+      title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
+      author: author,
+      status: manga.attributes.status,
+      genres: manga.attributes.tags.filter(tag => tag.attributes.group === 'genre').map(tag => tag.attributes.name.en),
+      description: manga.attributes.description.en || 'No description available.',
+      coverImage: coverImage,
+      chapters: chapters,
     });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error scraping manga details.', error: error.message });
+    console.error('MangaDex API Error:', error.response ? error.response.data : error.message);
+    res.status(500).json({ message: 'Failed to fetch manga details from MangaDex API.' });
   }
 };
