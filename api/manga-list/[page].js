@@ -11,31 +11,34 @@ module.exports = async (req, res) => {
     const { page = '1' } = req.query; // Default to page 1 if not provided
 
     const siteUrl = `https://mangakakalot.tv/manga_list?type=latest&category=all&state=all&page=${page}`;
-const { data } = await axios.get(siteUrl, {
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
-  }
-});
+    
+    // Make the request with the User-Agent header
+    const { data } = await axios.get(siteUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+      }
+    });
+
     const $ = cheerio.load(data);
 
     // --- Scrape Manga Data ---
     const mangaList = [];
-    $('.list-truyen-item-wrap').each((i, el) => {
+    // UPDATED SELECTOR: The class name has changed from '.list-truyen-item-wrap' to '.item'
+    $('.item').each((i, el) => {
       const titleElement = $(el).find('h3 a');
-      const latestChapterElement = $(el).find('.list-story-item-wrap-chapter');
-      const description = $(el).attr('data-tip'); // The description is in a tooltip attribute
+      // UPDATED SELECTOR: The chapter link is now inside an 'em' tag
+      const latestChapterElement = $(el).find('em a');
+      const imgElement = $(el).find('img');
       
-      // Basic cleaning of the description HTML
-      const cleanedDescription = description 
-        ? cheerio.load(description).text().replace(/<br\s*\/?>/gi, ' ').replace(/\s+/g, ' ').trim() 
-        : 'No description available.';
+      // The description is no longer in a tooltip, so we can't scrape it from this page.
+      const description = 'No description available on this page.';
 
       mangaList.push({
-        id: titleElement.attr('href').split('/').pop(),
+        id: titleElement.attr('href')?.split('/').pop() || '',
         title: titleElement.text(),
-        imgUrl: $(el).find('img').attr('src'),
+        imgUrl: imgElement.attr('src'),
         latestChapter: latestChapterElement.text(),
-        description: cleanedDescription,
+        description: description,
       });
     });
 
@@ -43,14 +46,11 @@ const { data } = await axios.get(siteUrl, {
     const pagination = [];
     $('.panel_page_number .page-item a.page-link').each((i, el) => {
         const pageNum = $(el).text();
-        // The site uses '...' for gaps, we only want numbers
         if (!isNaN(pageNum)) {
             pagination.push(parseInt(pageNum, 10));
         }
     });
 
-    // The site doesn't always show the first/last page numbers in the main links
-    // We can extract them from the 'First' and 'Last' buttons if they exist
     const firstPage = $('.page-item a[aria-label="First"]')?.attr('href')?.split('page=')[1] || '1';
     const lastPage = $('.page-item a[aria-label="Last"]')?.attr('href')?.split('page=')[1] || (pagination.length > 0 ? Math.max(...pagination).toString() : '1');
 
@@ -58,7 +58,7 @@ const { data } = await axios.get(siteUrl, {
         parseInt(firstPage, 10),
         ...pagination,
         parseInt(lastPage, 10)
-    ].filter((v, i, a) => a.indexOf(v) === i).sort((a,b) => a-b); // Unique and sorted
+    ].filter((v, i, a) => a.indexOf(v) === i).sort((a,b) => a-b);
 
 
     res.status(200).json({
