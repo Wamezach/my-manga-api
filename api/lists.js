@@ -2,17 +2,30 @@ const axios = require('axios');
 
 const API_BASE_URL = 'https://api.mangadex.org';
 
-const processMangaList = (mangaData) => {
+const getCoverFilename = async (coverId) => {
+    try {
+        const res = await axios.get(`${API_BASE_URL}/cover/${coverId}`);
+        return res.data.data.attributes.fileName;
+    } catch (e) {
+        return null;
+    }
+};
+
+const processMangaList = async (mangaData) => {
     if (!mangaData) return [];
-    return mangaData.map(manga => {
-        // Find the cover_art relationship
+    // For each manga, check if coverArt.attributes.fileName exists,
+    // else fetch filename from /cover/{id}
+    return await Promise.all(mangaData.map(async manga => {
         const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
-        // The correct filename with extension
-        const coverFilename = coverArt && coverArt.attributes && coverArt.attributes.fileName
+        let coverFilename = coverArt && coverArt.attributes && coverArt.attributes.fileName
             ? coverArt.attributes.fileName
             : null;
+
+        if (!coverFilename && coverArt && coverArt.id) {
+            coverFilename = await getCoverFilename(coverArt.id);
+        }
+
         const imgUrl = coverFilename
-            // IMPORTANT: filename includes extension!
             ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
             : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
 
@@ -21,7 +34,7 @@ const processMangaList = (mangaData) => {
             title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
             imgUrl: imgUrl,
         };
-    });
+    }));
 };
 
 const fetchList = (orderParams) => {
@@ -50,10 +63,17 @@ module.exports = async (req, res) => {
             fetchList({ createdAt: 'desc' })
         ]);
 
+        // Use async processMangaList
+        const [trending, latest, newlyAdded] = await Promise.all([
+            processMangaList(trendingRes.data.data),
+            processMangaList(latestRes.data.data),
+            processMangaList(newRes.data.data),
+        ]);
+
         res.status(200).json({
-            trending: processMangaList(trendingRes.data.data),
-            latest: processMangaList(latestRes.data.data),
-            newlyAdded: processMangaList(newRes.data.data),
+            trending,
+            latest,
+            newlyAdded,
         });
 
     } catch (error) {
