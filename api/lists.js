@@ -6,8 +6,9 @@ const processMangaList = (mangaData) => {
     if (!mangaData) return [];
     return mangaData.map(manga => {
         const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
+        // Ensure filename includes extension (e.g., .png, .jpg)
         const coverFilename = coverArt ? coverArt.attributes.fileName : null;
-        const imgUrl = coverFilename
+        const imgUrl = (coverFilename && manga.id)
             ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
             : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
 
@@ -27,22 +28,28 @@ const fetchList = (orderParams) => {
             limit: 15,
             'includes[]': ['cover_art'],
             'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
-            hasAvailableChapters: 'true', // Only get manga with chapters
+            hasAvailableChapters: 'true',
             order: orderParams,
         }
     });
 };
 
 module.exports = async (req, res) => {
+    // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
+    // Only allow GET requests
+    if (req.method !== 'GET') {
+        return res.status(405).json({ message: 'Method Not Allowed' });
+    }
+
     try {
         const [trendingRes, latestRes, newRes] = await Promise.all([
-            fetchList({ followedCount: 'desc' }), // Trending
-            fetchList({ updatedAt: 'desc' }),     // Latest
-            fetchList({ createdAt: 'desc' })      // New
+            fetchList({ followedCount: 'desc' }),
+            fetchList({ updatedAt: 'desc' }),
+            fetchList({ createdAt: 'desc' })
         ]);
 
         res.status(200).json({
