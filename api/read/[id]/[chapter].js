@@ -1,5 +1,6 @@
 const axios = require('axios');
-const cheerio = require('cheerio');
+
+const API_BASE_URL = 'https://api.mangadex.org';
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -7,41 +8,39 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   try {
-    const { id, chapter } = req.query;
-    // UPDATED: New source website
-    const siteUrl = `https://weebcentral.com/manga/${id}/${chapter}`;
+    // Note: The 'id' from the query is the MANGA id, but the 'chapter' is the CHAPTER id.
+    const { chapter: chapterId } = req.query;
 
-    const { data } = await axios.get(siteUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
-      }
-    });
-
-    const $ = cheerio.load(data);
-    const imageUrls = [];
-
-    // UPDATED: New selectors for weebcentral.com
-    $('img[class*="w-full"][class*="h-auto"]').each((i, el) => {
-      const imageUrl = $(el).attr('src');
-      if (imageUrl) {
-        imageUrls.push(imageUrl);
-      }
-    });
-
-    const title = $('a[href*="/manga/"]').first().text().trim();
-
-    if (imageUrls.length === 0) {
-        return res.status(404).json({ message: 'Chapter not found or no images available.' });
+    if (!chapterId) {
+      return res.status(400).json({ message: 'Chapter ID is required.' });
     }
 
+    // --- Get the MangaDex server URL for the chapter images ---
+    const serverResponse = await axios({
+      method: 'GET',
+      url: `${API_BASE_URL}/at-home/server/${chapterId}`,
+    });
+
+    const { baseUrl, chapter: chapterData } = serverResponse.data;
+    const { hash, data: pageFilenames } = chapterData;
+
+    // --- Construct the full URL for each page image ---
+    const imageUrls = pageFilenames.map(filename => {
+      // The final URL is a combination of the base URL, the data mode, the hash, and the filename
+      return `${baseUrl}/data/${hash}/${filename}`;
+    });
+
     res.status(200).json({
-      title: title,
-      chapter: chapter,
+      title: 'Manga Chapter', // Title info isn't in this endpoint, can be fetched separately if needed
+      chapter: chapterId,
       imageUrls: imageUrls,
     });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error scraping manga chapter.', error: error.message });
+    console.error('MangaDex API Error:', error.response ? error.response.data : error.message);
+    if (error.response && error.response.status === 404) {
+      return res.status(404).json({ message: 'Chapter not found on MangaDex.' });
+    }
+    res.status(500).json({ message: 'Failed to fetch chapter images from MangaDex API.' });
   }
 };
