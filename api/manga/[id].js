@@ -2,79 +2,53 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 module.exports = async (req, res) => {
-  // Allow requests from any origin
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   try {
-    const { id } = req.query; // Get manga ID from the URL path, e.g., /api/manga/your-manga-id
-    if (!id) {
-      return res.status(400).json({ message: 'Manga ID is required.' });
-    }
+    const { id } = req.query;
+    // UPDATED: New source website
+    const siteUrl = `https://weebcentral.com/manga/${id}`;
 
-    const siteUrl = `https://ww8.mangakakalot.tv/manga/${id}`;
-const { data } = await axios.get(siteUrl, {
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
-  }
-});
-    const $ = cheerio.load(data);
-
-    // Helper function to extract info from the info list
-    const getInfoText = (label) => {
-        const element = $(`.story-info-right-extent p:contains('${label}')`);
-        if (element.length) {
-            // Clones the element, removes the label span, and gets the remaining text
-            return element.clone().find('span').remove().end().text().trim();
-        }
-        return 'N/A';
-    };
-    
-    // Extract genres from the list
-    const genres = [];
-    const genreElements = $(`.story-info-right-extent p:contains('Genres') a`);
-    if (genreElements.length) {
-        genreElements.each((i, el) => {
-            genres.push($(el).text());
-        });
-    }
-
-    const chapters = [];
-    $('.row-content-chapter li').each((i, el) => {
-      const chapterLink = $(el).find('a');
-      const views = $(el).find('.chapter-view').text().trim();
-      const uploaded = $(el).find('.chapter-time').text().trim();
-
-      chapters.push({
-        chapterId: chapterLink.attr('href').split('/').pop(),
-        title: chapterLink.text(),
-        views: views,
-        uploaded: uploaded,
-      });
+    const { data } = await axios.get(siteUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+      }
     });
 
-    const mangaInfo = {
-      id: id,
-      title: $('.story-info-right h1').text(),
-      imageUrl: $('.story-info-left .info-image img').attr('src'),
-      author: getInfoText('Author(s)'),
-      status: getInfoText('Status'),
-      lastUpdated: getInfoText('Updated'),
-      views: getInfoText('View'),
-      genres: genres,
-      rating: $('.story-info-right-extent .rate-score-number').text() || 'N/A',
-      description: $('#panel-story-info-description').text().trim(),
-      chapters: chapters, // Chapters are already scraped in correct order (newest first)
-    };
+    const $ = cheerio.load(data);
 
-    res.status(200).json(mangaInfo);
+    // UPDATED: New selectors for weebcentral.com
+    const title = $('h1[class*="text-2xl"]').text().trim();
+    const coverImage = $('img[class*="rounded-md"][alt*="cover image"]').attr('src');
+    const description = $('p[class*="text-gray-300"]').first().text().trim();
+    
+    const genres = [];
+    $('div[class*="items-center"] a[href*="/genre/"]').each((i, el) => {
+      genres.push($(el).text().trim());
+    });
+
+    const chapters = [];
+    $('div[class*="col-span-1"] a[href*="/manga/"]').each((i, el) => {
+      const chapterId = $(el).attr('href')?.split('/').pop();
+      const chapterTitle = $(el).find('div').first().text().trim();
+      chapters.push({ chapterTitle, chapterId });
+    });
+
+    res.status(200).json({
+      id,
+      title,
+      author: 'N/A', // Author info is not easily available on this site
+      status: 'N/A', // Status info is not easily available on this site
+      genres,
+      description,
+      coverImage,
+      chapters: chapters.reverse(), // Reverse to show Chapter 1 first
+    });
+
   } catch (error) {
     console.error(error);
-    if (error.response && error.response.status === 404) {
-        return res.status(404).json({ message: `Manga with ID '${req.query.id}' not found.` });
-    }
-    res.status(500).json({ message: 'Error scraping manga info.' });
+    res.status(500).json({ message: 'Error scraping manga details.', error: error.message });
   }
 };
-
