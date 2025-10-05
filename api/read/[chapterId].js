@@ -8,46 +8,49 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   try {
-    const page = parseInt(req.query.page || '1', 10);
-    const limit = 24;
-    const offset = (page - 1) * limit;
+    const { chapterId } = req.query;
 
-    const response = await axios({
+    if (!chapterId) {
+      return res.status(400).json({ message: 'Chapter ID is required from the URL path.' });
+    }
+
+    const serverResponse = await axios({
       method: 'GET',
-      url: `${API_BASE_URL}/manga`,
-      params: {
-        limit: limit,
-        offset: offset,
-        order: { updatedAt: 'desc' },
-        'includes[]': ['cover_art'],
-        'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
-        // UPDATED: Only fetch manga that have chapters
-        hasAvailableChapters: 'true',
-      },
+      url: `${API_BASE_URL}/at-home/server/${chapterId}`,
     });
 
-    const mangaList = response.data.data.map(manga => {
-      const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
-      const coverFilename = coverArt ? coverArt.attributes.fileName : null;
-      const imgUrl = coverFilename
-        ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.256.jpg`
-        : 'https://via.placeholder.com/256/1f2937/d1d5db.png?text=No+Cover';
+    const { baseUrl, chapter: chapterData } = serverResponse.data;
+    const { hash, data: pageFilenames, dataSaver: pageFilenamesDataSaver } = chapterData;
 
-      return {
-        id: manga.id,
-        title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
-        imgUrl: imgUrl,
-        latestChapter: `Chapter ${manga.attributes.lastChapter || 'N/A'}`,
-      };
+    let pages = pageFilenames;
+    let mode = 'data';
+
+    // If the high-quality 'data' list is empty or doesn't exist, try the 'data-saver' list.
+    if (!pages || pages.length === 0) {
+      pages = pageFilenamesDataSaver;
+      mode = 'data-saver';
+    }
+
+    // FINAL FIX: If BOTH lists are empty, create an empty array to prevent errors.
+    if (!pages) {
+      pages = [];
+    }
+
+    const imageUrls = pages.map(filename => {
+      return `${baseUrl}/${mode}/${hash}/${filename}`;
     });
 
     res.status(200).json({
-      pagination: [page],
-      data: mangaList,
+      title: 'Manga Chapter',
+      chapter: chapterId,
+      imageUrls: imageUrls,
     });
 
   } catch (error) {
-    console.error('MangaDex API Error:', error.response ? error.response.data : error.message);
-    res.status(500).json({ message: 'Failed to fetch data from MangaDex API.' });
+    console.error('MangaDex Chapter API Error:', error.response ? error.response.data.errors : error.message);
+    if (error.response && error.response.status === 404) {
+      return res.status(404).json({ message: 'Chapter not found on MangaDex.' });
+    }
+    res.status(500).json({ message: 'Failed to fetch chapter images from MangaDex API.' });
   }
 };
