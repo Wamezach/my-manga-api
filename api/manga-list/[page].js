@@ -4,8 +4,11 @@ const API_BASE_URL = 'https://api.mangadex.org';
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
   try {
     const page = parseInt(req.query.page || '1', 10);
@@ -18,25 +21,21 @@ module.exports = async (req, res) => {
       params: {
         limit,
         offset,
-        'includes[]': 'cover_art', // Use string, not array
+        'includes[]': 'cover_art',
         'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
         hasAvailableChapters: true,
-        order: {
-          updatedAt: 'desc'
-        }
-      }
+        order: { updatedAt: 'desc' },
+      },
     });
 
     const mangaList = response.data.data.map(manga => {
-      // Defensive extraction of cover art
-      const coverArt = Array.isArray(manga.relationships)
-        ? manga.relationships.find(rel => rel.type === 'cover_art')
-        : null;
-      const coverFilename = coverArt?.attributes?.fileName;
-      const imgUrl = (coverFilename && manga.id)
-        ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.256.jpg`
-        : 'https://via.placeholder.com/256/1f2937/d1d5db.png?text=No+Cover';
-
+      let imgUrl = 'https://via.placeholder.com/256/1f2937/d1d5db.png?text=No+Cover';
+      if (Array.isArray(manga.relationships)) {
+        const coverArt = manga.relationships.find(rel => rel.type === 'cover_art' && rel.attributes && rel.attributes.fileName);
+        if (coverArt) {
+          imgUrl = `https://uploads.mangadex.org/covers/${manga.id}/${coverArt.attributes.fileName}.256.jpg`;
+        }
+      }
       return {
         id: manga.id,
         title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
