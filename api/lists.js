@@ -1,39 +1,16 @@
 const axios = require('axios');
 
-// Helper: Get cover image from Jikan by title
-async function getCoverFromJikan(title) {
-  try {
-    const res = await axios.get('https://api.jikan.moe/v4/manga', { params: { q: title, limit: 1 } });
-    const manga = res.data.data[0];
-    return manga?.images?.jpg?.large_image_url || manga?.images?.jpg?.image_url || null;
-  } catch {
-    return null;
-  }
-}
-
-const processMangaList = async (mangaData) => {
-  if (!mangaData) return [];
-  return await Promise.all(mangaData.map(async manga => {
-    const title = manga.attributes.title.en || Object.values(manga.attributes.title)[0];
-    const imgUrl = await getCoverFromJikan(title) || 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
-    return {
-      id: manga.id,
-      title,
-      imgUrl,
-    };
+// Helper: Get manga from Kitsu by filter (e.g. trending, latest, etc.)
+async function getKitsuMangaList(params = {}) {
+  const res = await axios.get('https://kitsu.io/api/edge/manga', { params });
+  return res.data.data.map(manga => ({
+    id: manga.id,
+    title: manga.attributes.canonicalTitle,
+    imgUrl: manga.attributes.posterImage?.medium || 'https://via.placeholder.com/256?text=No+Cover',
+    synopsis: manga.attributes.synopsis,
+    status: manga.attributes.status,
   }));
-};
-
-const fetchList = (orderParams) => axios({
-  method: 'GET',
-  url: 'https://api.mangadex.org/manga',
-  params: {
-    limit: 15,
-    'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
-    hasAvailableChapters: true,
-    order: orderParams,
-  }
-});
+}
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -42,17 +19,14 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const [trendingRes, latestRes, newRes] = await Promise.all([
-      fetchList({ followedCount: 'desc' }),
-      fetchList({ updatedAt: 'desc' }),
-      fetchList({ createdAt: 'desc' })
+    // Example fetches: Trending, Latest, Newly Added
+    const [trending, latest, newlyAdded] = await Promise.all([
+      getKitsuMangaList({ 'sort': 'popularityRank', 'page[limit]': 15 }),
+      getKitsuMangaList({ 'sort': '-updatedAt', 'page[limit]': 15 }),
+      getKitsuMangaList({ 'sort': '-createdAt', 'page[limit]': 15 }),
     ]);
-    const trending = await processMangaList(trendingRes.data.data);
-    const latest = await processMangaList(latestRes.data.data);
-    const newlyAdded = await processMangaList(newRes.data.data);
-
     res.status(200).json({ trending, latest, newlyAdded });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch lists.' });
+    res.status(500).json({ message: 'Failed to fetch lists from Kitsu API.' });
   }
 };
