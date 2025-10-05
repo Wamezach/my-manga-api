@@ -14,7 +14,6 @@ module.exports = async (req, res) => {
       return res.status(400).json({ message: 'Search query is required.' });
     }
 
-    // Making the API request using the standard Axios `params` object
     const response = await axios({
       method: 'GET',
       url: `${API_BASE_URL}/manga`,
@@ -22,17 +21,16 @@ module.exports = async (req, res) => {
         limit: 20,
         title: q,
         'includes[]': ['cover_art'],
-        // As requested, include all content ratings in search results
         'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
-        order: { relevance: 'desc' }
+        order: { relevance: 'desc' },
+        // UPDATED: Only fetch manga that have chapters
+        hasAvailableChapters: 'true',
       }
     });
 
-    // Transform the data into our simple format
     const mangaList = response.data.data.map(manga => {
       const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
       const coverFilename = coverArt ? coverArt.attributes.fileName : null;
-      // Use smaller images for search grid
       const imgUrl = coverFilename
         ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.256.jpg`
         : 'https://via.placeholder.com/256/1f2937/d1d5db.png?text=No+Cover';
@@ -41,7 +39,7 @@ module.exports = async (req, res) => {
         id: manga.id,
         title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
         imgUrl: imgUrl,
-        description: manga.attributes.description.en || '',
+        latestChapter: `Chapter ${manga.attributes.lastChapter || 'N/A'}`,
       };
     });
 
