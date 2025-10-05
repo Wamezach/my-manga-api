@@ -1,7 +1,39 @@
 const axios = require('axios');
 
-// Example Ketsu endpoint
-const KETSU_LIST_URL = 'https://api.ketsu.io/manga/popular';
+// Helper: Get cover image from Jikan by title
+async function getCoverFromJikan(title) {
+  try {
+    const res = await axios.get('https://api.jikan.moe/v4/manga', { params: { q: title, limit: 1 } });
+    const manga = res.data.data[0];
+    return manga?.images?.jpg?.large_image_url || manga?.images?.jpg?.image_url || null;
+  } catch {
+    return null;
+  }
+}
+
+const processMangaList = async (mangaData) => {
+  if (!mangaData) return [];
+  return await Promise.all(mangaData.map(async manga => {
+    const title = manga.attributes.title.en || Object.values(manga.attributes.title)[0];
+    const imgUrl = await getCoverFromJikan(title) || 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
+    return {
+      id: manga.id,
+      title,
+      imgUrl,
+    };
+  }));
+};
+
+const fetchList = (orderParams) => axios({
+  method: 'GET',
+  url: 'https://api.mangadex.org/manga',
+  params: {
+    limit: 15,
+    'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
+    hasAvailableChapters: true,
+    order: orderParams,
+  }
+});
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -10,16 +42,17 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const response = await axios.get(KETSU_LIST_URL);
-    const mangaList = response.data.results.map(manga => ({
-      id: manga.id,
-      title: manga.title,
-      imgUrl: manga.image,
-      genres: manga.genres || [],
-      description: manga.synopsis || "",
-    }));
-    res.status(200).json({ trending: mangaList, latest: mangaList, newlyAdded: mangaList });
+    const [trendingRes, latestRes, newRes] = await Promise.all([
+      fetchList({ followedCount: 'desc' }),
+      fetchList({ updatedAt: 'desc' }),
+      fetchList({ createdAt: 'desc' })
+    ]);
+    const trending = await processMangaList(trendingRes.data.data);
+    const latest = await processMangaList(latestRes.data.data);
+    const newlyAdded = await processMangaList(newRes.data.data);
+
+    res.status(200).json({ trending, latest, newlyAdded });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch lists from Ketsu.' });
+    res.status(500).json({ message: 'Failed to fetch lists.' });
   }
 };
