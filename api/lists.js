@@ -1,48 +1,33 @@
 const axios = require('axios');
 
-const MANGADEX_API_BASE_URL = 'https://api.mangadex.org';
+const API_BASE_URL = 'https://api.mangadex.org';
 
-// Get cover image from DuckDuckGo by title
-const getDuckDuckGoImage = async (title) => {
-    try {
-        const res = await axios.get('https://api.duckduckgo.com/', {
-            params: {
-                q: `${title} manga`,
-                format: 'json',
-                no_redirect: 1,
-                no_html: 1,
-                skip_disambig: 1
-            }
-        });
-        // DuckDuckGo sometimes returns empty for manga, fallback if missing
-        if (res.data.Image && res.data.Image !== "") return res.data.Image;
-    } catch (e) {
-        // Optionally log error
-    }
-    return 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
-};
-
-const processMangaList = async (mangaData) => {
+const processMangaList = (mangaData) => {
     if (!mangaData) return [];
-    return await Promise.all(mangaData.map(async manga => {
-        const title = manga.attributes.title.en || Object.values(manga.attributes.title)[0];
-        const imgUrl = await getDuckDuckGoImage(title);
+    return mangaData.map(manga => {
+        const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
+        const coverFilename = coverArt ? coverArt.attributes.fileName : null;
+        const imgUrl = coverFilename
+            ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
+            : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
+
         return {
             id: manga.id,
-            title,
-            imgUrl,
-            mangaDexUrl: `https://mangadex.org/title/${manga.id}`,
+            title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
+            imgUrl: imgUrl,
         };
-    }));
+    });
 };
 
 const fetchList = (orderParams) => {
     return axios({
         method: 'GET',
-        url: `${MANGADEX_API_BASE_URL}/manga`,
+        url: `${API_BASE_URL}/manga`,
         params: {
             limit: 15,
-            hasAvailableChapters: 'true', // Only manga available for reading!
+            'includes[]': ['cover_art'],
+            'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
+            hasAvailableChapters: 'true', // Only get manga with chapters
             order: orderParams,
         }
     });
@@ -60,21 +45,14 @@ module.exports = async (req, res) => {
             fetchList({ createdAt: 'desc' })      // New
         ]);
 
-        // Use async processMangaList for external covers
-        const [trending, latest, newlyAdded] = await Promise.all([
-            processMangaList(trendingRes.data.data),
-            processMangaList(latestRes.data.data),
-            processMangaList(newRes.data.data),
-        ]);
-
         res.status(200).json({
-            trending,
-            latest,
-            newlyAdded,
+            trending: processMangaList(trendingRes.data.data),
+            latest: processMangaList(latestRes.data.data),
+            newlyAdded: processMangaList(newRes.data.data),
         });
 
     } catch (error) {
-        console.error('Lists API Error:', error.message);
-        res.status(500).json({ message: 'Failed to fetch lists.' });
+        console.error('MangaDex Lists API Error:', error.response ? error.response.data.errors : error.message);
+        res.status(500).json({ message: 'Failed to fetch lists from MangaDex API.' });
     }
 };
