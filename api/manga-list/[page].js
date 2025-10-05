@@ -16,27 +16,31 @@ module.exports = async (req, res) => {
       method: 'GET',
       url: `${API_BASE_URL}/manga`,
       params: {
-        limit: limit,
-        offset: offset,
-        order: { updatedAt: 'desc' },
-        'includes[]': ['cover_art'],
+        limit,
+        offset,
+        'includes[]': 'cover_art', // Use string, not array
         'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
-        // UPDATED: Only fetch manga that have chapters
-        hasAvailableChapters: 'true',
-      },
+        hasAvailableChapters: true,
+        order: {
+          updatedAt: 'desc'
+        }
+      }
     });
 
     const mangaList = response.data.data.map(manga => {
-      const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
-      const coverFilename = coverArt ? coverArt.attributes.fileName : null;
-      const imgUrl = coverFilename
+      // Defensive extraction of cover art
+      const coverArt = Array.isArray(manga.relationships)
+        ? manga.relationships.find(rel => rel.type === 'cover_art')
+        : null;
+      const coverFilename = coverArt?.attributes?.fileName;
+      const imgUrl = (coverFilename && manga.id)
         ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.256.jpg`
         : 'https://via.placeholder.com/256/1f2937/d1d5db.png?text=No+Cover';
 
       return {
         id: manga.id,
         title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
-        imgUrl: imgUrl,
+        imgUrl,
         latestChapter: `Chapter ${manga.attributes.lastChapter || 'N/A'}`,
       };
     });
