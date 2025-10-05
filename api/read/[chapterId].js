@@ -1,5 +1,6 @@
 const axios = require('axios');
-const MANGADEX_BASE_URL = 'https://api.mangadex.org';
+
+const API_BASE_URL = 'https://api.mangadex.org';
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -8,11 +9,14 @@ module.exports = async (req, res) => {
 
   try {
     const { chapterId } = req.query;
-    if (!chapterId) return res.status(400).json({ message: 'Chapter ID is required.' });
+
+    if (!chapterId) {
+      return res.status(400).json({ message: 'Chapter ID is required from the URL path.' });
+    }
 
     const serverResponse = await axios({
       method: 'GET',
-      url: `${MANGADEX_BASE_URL}/at-home/server/${chapterId}`,
+      url: `${API_BASE_URL}/at-home/server/${chapterId}`,
     });
 
     const { baseUrl, chapter: chapterData } = serverResponse.data;
@@ -21,13 +25,20 @@ module.exports = async (req, res) => {
     let pages = pageFilenames;
     let mode = 'data';
 
+    // If the high-quality 'data' list is empty or doesn't exist, try the 'data-saver' list.
     if (!pages || pages.length === 0) {
       pages = pageFilenamesDataSaver;
       mode = 'data-saver';
     }
-    if (!pages) pages = [];
 
-    const imageUrls = pages.map(filename => `${baseUrl}/${mode}/${hash}/${filename}`);
+    // FINAL FIX: If BOTH lists are empty, create an empty array to prevent errors.
+    if (!pages) {
+      pages = [];
+    }
+
+    const imageUrls = pages.map(filename => {
+      return `${baseUrl}/${mode}/${hash}/${filename}`;
+    });
 
     res.status(200).json({
       title: 'Manga Chapter',
@@ -36,6 +47,10 @@ module.exports = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch chapter images from MangaDex.' });
+    console.error('MangaDex Chapter API Error:', error.response ? error.response.data.errors : error.message);
+    if (error.response && error.response.status === 404) {
+      return res.status(404).json({ message: 'Chapter not found on MangaDex.' });
+    }
+    res.status(500).json({ message: 'Failed to fetch chapter images from MangaDex API.' });
   }
 };
