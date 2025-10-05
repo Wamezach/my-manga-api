@@ -1,50 +1,45 @@
 const axios = require('axios');
 
-const API_BASE_URL = 'https://api.mangadex.org';
+// Fast cover fetch from Jikan API (MyAnimeList)
+async function getCoverFromJikan(title) {
+  try {
+    const res = await axios.get('https://api.jikan.moe/v4/manga', { params: { q: title, limit: 1 } });
+    const manga = res.data.data[0];
+    return manga?.images?.jpg?.large_image_url || manga?.images?.jpg?.image_url || null;
+  } catch {
+    return null;
+  }
+}
 
-const processMangaList = (mangaData) => {
+const processMangaList = async (mangaData) => {
   if (!mangaData) return [];
-  return mangaData.map(manga => {
-    let imgUrl = 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
-
-    if (Array.isArray(manga.relationships)) {
-      // Find cover_art relationship
-      const coverArt = manga.relationships.find(rel => rel.type === 'cover_art' && rel.attributes && rel.attributes.fileName);
-
-      if (coverArt && coverArt.attributes.fileName) {
-        imgUrl = `https://uploads.mangadex.org/covers/${manga.id}/${coverArt.attributes.fileName}.512.jpg`;
-      }
-    }
-
+  return await Promise.all(mangaData.map(async manga => {
+    const title = manga.attributes.title.en || Object.values(manga.attributes.title)[0];
+    const imgUrl = await getCoverFromJikan(title) || 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
     return {
       id: manga.id,
-      title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
+      title,
       imgUrl,
     };
-  });
+  }));
 };
 
-const fetchList = (orderParams) => {
-  return axios({
-    method: 'GET',
-    url: `${API_BASE_URL}/manga`,
-    params: {
-      limit: 15,
-      'includes[]': 'cover_art', // Use string for Axios compatibility
-      'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
-      hasAvailableChapters: true,
-      order: orderParams,
-    }
-  });
-};
+const fetchList = (orderParams) => axios({
+  method: 'GET',
+  url: 'https://api.mangadex.org/manga',
+  params: {
+    limit: 15,
+    'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
+    hasAvailableChapters: true,
+    order: orderParams,
+  }
+});
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
     const [trendingRes, latestRes, newRes] = await Promise.all([
@@ -52,18 +47,12 @@ module.exports = async (req, res) => {
       fetchList({ updatedAt: 'desc' }),
       fetchList({ createdAt: 'desc' })
     ]);
+    const trending = await processMangaList(trendingRes.data.data);
+    const latest = await processMangaList(latestRes.data.data);
+    const newlyAdded = await processMangaList(newRes.data.data);
 
-    // Debug: log the first manga relationships
-    console.log('TRENDING RELATIONSHIPS:', JSON.stringify(trendingRes.data.data[0]?.relationships, null, 2));
-
-    res.status(200).json({
-      trending: processMangaList(trendingRes.data.data),
-      latest: processMangaList(latestRes.data.data),
-      newlyAdded: processMangaList(newRes.data.data),
-    });
-
+    res.status(200).json({ trending, latest, newlyAdded });
   } catch (error) {
-    console.error('MangaDex Lists API Error:', error.response ? error.response.data.errors : error.message);
-    res.status(500).json({ message: 'Failed to fetch lists from MangaDex API.' });
+    res.status(500).json({ message: 'Failed to fetch lists.' });
   }
 };
