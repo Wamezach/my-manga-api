@@ -18,10 +18,11 @@ module.exports = async (req, res) => {
       params: {
         limit: limit,
         offset: offset,
-        // FIXED: Changed 'latestUploadedAt' to the correct 'updatedAt'
         order: { updatedAt: 'desc' },
         'includes[]': ['cover_art'],
-        'contentRating[]': ['safe', 'suggestive'],
+        'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
+        // UPDATED: Only fetch manga that have chapters
+        hasAvailableChapters: 'true',
       },
     });
 
@@ -37,7 +38,6 @@ module.exports = async (req, res) => {
         title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
         imgUrl: imgUrl,
         latestChapter: `Chapter ${manga.attributes.lastChapter || 'N/A'}`,
-        description: manga.attributes.description.en || '',
       };
     });
 
