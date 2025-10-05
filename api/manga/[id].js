@@ -1,4 +1,5 @@
 const axios = require('axios');
+const KETSU_INFO_URL = 'https://api.ketsu.io/manga/info';
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -9,39 +10,25 @@ module.exports = async (req, res) => {
     const { id } = req.query;
     if (!id) return res.status(400).json({ message: 'Manga id is required.' });
 
-    // Get manga detail
-    const mangaRes = await axios.get(`https://kitsu.io/api/edge/manga/${id}`);
-    const manga = mangaRes.data.data;
+    const infoRes = await axios.get(`${KETSU_INFO_URL}?id=${id}`);
+    const manga = infoRes.data;
 
-    // Get chapters for manga
-    let chapters = [];
-    try {
-      const chaptersRes = await axios.get('https://kitsu.io/api/edge/manga-chapters', {
-        params: { 'filter[manga]': id, 'page[limit]': 500, 'sort': 'number' }
-      });
-      chapters = Array.isArray(chaptersRes.data.data)
-        ? chaptersRes.data.data.map(chap => ({
-            chapterId: chap.id,
-            chapterTitle: `Chapter ${chap.attributes.number}` + (chap.attributes.titles?.en ? `: ${chap.attributes.titles.en}` : ''),
-            synopsis: chap.attributes.synopsis
-          }))
-        : [];
-    } catch (e) {
-      chapters = [];
-    }
-
+    // You could add a field for your frontend to know this is a MangaDex chapter id for reading.
     res.status(200).json({
       id: manga.id,
-      title: manga.attributes.canonicalTitle,
-      author: manga.attributes.author || 'Unknown',
-      status: manga.attributes.status,
-      genres: manga.attributes.categories || [],
-      description: manga.attributes.synopsis,
-      coverImage: manga.attributes.posterImage?.large || 'https://via.placeholder.com/512?text=No+Cover',
-      chapters, // Always an array!
+      title: manga.title,
+      author: manga.author || 'Unknown',
+      status: manga.status || "",
+      genres: manga.genres || [],
+      description: manga.synopsis || "",
+      coverImage: manga.image,
+      chapters: (manga.chapters || []).map(chap => ({
+        chapterId: chap.mangaDexId, // Use MangaDex id for reading!
+        chapterTitle: chap.title || `Chapter ${chap.number}`,
+        // If you need both: store both Ketsu id and MangaDex id
+      })),
     });
-
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch manga details from Kitsu API.' });
+    res.status(500).json({ message: 'Failed to fetch manga details from Ketsu.' });
   }
 };
