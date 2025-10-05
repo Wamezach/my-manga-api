@@ -19,13 +19,15 @@ module.exports = async (req, res) => {
       const chaptersRes = await axios.get('https://kitsu.io/api/edge/manga-chapters', {
         params: { 'filter[manga]': id, 'page[limit]': 500, 'sort': 'number' }
       });
-      chapters = chaptersRes.data.data.map(chap => ({
-        chapterId: chap.id,
-        chapterTitle: `Chapter ${chap.attributes.number}` + (chap.attributes.titles?.en ? `: ${chap.attributes.titles.en}` : ''),
-        synopsis: chap.attributes.synopsis
-      }));
+      chapters = Array.isArray(chaptersRes.data.data)
+        ? chaptersRes.data.data.map(chap => ({
+            chapterId: chap.id,
+            chapterTitle: `Chapter ${chap.attributes.number}` + (chap.attributes.titles?.en ? `: ${chap.attributes.titles.en}` : ''),
+            synopsis: chap.attributes.synopsis
+          }))
+        : [];
     } catch (e) {
-      // If fetching chapters fails, keep chapters as []
+      chapters = [];
     }
 
     res.status(200).json({
