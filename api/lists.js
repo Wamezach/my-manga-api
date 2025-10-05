@@ -7,7 +7,13 @@ const processMangaList = (mangaData) => {
   return mangaData.map(manga => {
     let imgUrl = 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
     if (Array.isArray(manga.relationships)) {
-      const coverArt = manga.relationships.find(rel => rel.type === 'cover_art' && rel.attributes && rel.attributes.fileName);
+      // Defensive extraction: find cover_art relationship with a valid filename
+      const coverArt = manga.relationships.find(rel =>
+        rel.type === 'cover_art' &&
+        rel.attributes &&
+        typeof rel.attributes.fileName === 'string' &&
+        rel.attributes.fileName.length > 0
+      );
       if (coverArt) {
         imgUrl = `https://uploads.mangadex.org/covers/${manga.id}/${coverArt.attributes.fileName}.512.jpg`;
       }
@@ -35,6 +41,7 @@ const fetchList = (orderParams) => {
 };
 
 module.exports = async (req, res) => {
+  // Proper CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -44,9 +51,9 @@ module.exports = async (req, res) => {
 
   try {
     const [trendingRes, latestRes, newRes] = await Promise.all([
-      fetchList({ followedCount: 'desc' }),
-      fetchList({ updatedAt: 'desc' }),
-      fetchList({ createdAt: 'desc' })
+      fetchList({ followedCount: 'desc' }), // Trending
+      fetchList({ updatedAt: 'desc' }),     // Latest
+      fetchList({ createdAt: 'desc' })      // New
     ]);
 
     res.status(200).json({
