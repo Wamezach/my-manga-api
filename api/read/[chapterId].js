@@ -8,9 +8,8 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   try {
-    // The 'id' is the manga ID, and 'chapter' is the chapter ID from the URL
-    // e.g., /api/read/MANGA_ID/CHAPTER_ID
-    const { chapter: chapterId } = req.query;
+    // FIXED: The variable name now correctly matches the filename `[chapterId].js`
+    const { chapterId } = req.query;
 
     if (!chapterId) {
       return res.status(400).json({ message: 'Chapter ID is required from the URL path.' });
@@ -23,11 +22,10 @@ module.exports = async (req, res) => {
     });
 
     const { baseUrl, chapter: chapterData } = serverResponse.data;
-    const { hash, data: pageFilenames, dataSaver: pageFilenamesDataSaver } = chapterData;
+    const { hash, data: pageFilenames } = chapterData;
 
     // --- Construct the full URL for each page image ---
     const imageUrls = pageFilenames.map(filename => {
-      // The final URL is a combination of the base URL, 'data' mode, the hash, and the filename
       return `${baseUrl}/data/${hash}/${filename}`;
     });
 
