@@ -1,38 +1,35 @@
 const axios = require('axios');
 
-const API_BASE_URL = 'https://api.mangadex.org';
+const MANGADEX_API_BASE_URL = 'https://api.mangadex.org';
+const KITSU_API_BASE_URL = 'https://kitsu.io/api/edge/manga';
 
-const getCoverFilename = async (coverId) => {
+// Get cover image from Kitsu by title
+const getExternalCover = async (title) => {
     try {
-        const res = await axios.get(`${API_BASE_URL}/cover/${coverId}`);
-        return res.data.data.attributes.fileName;
+        const res = await axios.get(KITSU_API_BASE_URL, {
+            params: { 'filter[text]': title }
+        });
+        if (res.data.data.length > 0 && res.data.data[0].attributes.posterImage) {
+            // Use the original or large poster image
+            return res.data.data[0].attributes.posterImage.original || res.data.data[0].attributes.posterImage.large;
+        }
     } catch (e) {
-        return null;
+        // Optionally log error
     }
+    // Fallback placeholder
+    return 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
 };
 
 const processMangaList = async (mangaData) => {
     if (!mangaData) return [];
-    // For each manga, check if coverArt.attributes.fileName exists,
-    // else fetch filename from /cover/{id}
     return await Promise.all(mangaData.map(async manga => {
-        const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
-        let coverFilename = coverArt && coverArt.attributes && coverArt.attributes.fileName
-            ? coverArt.attributes.fileName
-            : null;
-
-        if (!coverFilename && coverArt && coverArt.id) {
-            coverFilename = await getCoverFilename(coverArt.id);
-        }
-
-        const imgUrl = coverFilename
-            ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
-            : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
-
+        const title = manga.attributes.title.en || Object.values(manga.attributes.title)[0];
+        const imgUrl = await getExternalCover(title);
         return {
             id: manga.id,
-            title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
-            imgUrl: imgUrl,
+            title,
+            imgUrl,
+            mangaDexUrl: `https://mangadex.org/title/${manga.id}`,
         };
     }));
 };
@@ -40,12 +37,10 @@ const processMangaList = async (mangaData) => {
 const fetchList = (orderParams) => {
     return axios({
         method: 'GET',
-        url: `${API_BASE_URL}/manga`,
+        url: `${MANGADEX_API_BASE_URL}/manga`,
         params: {
             limit: 15,
-            'includes[]': ['cover_art'],
-            'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
-            hasAvailableChapters: 'true',
+            hasAvailableChapters: 'true', // Only manga available for reading!
             order: orderParams,
         }
     });
@@ -58,12 +53,12 @@ module.exports = async (req, res) => {
 
     try {
         const [trendingRes, latestRes, newRes] = await Promise.all([
-            fetchList({ followedCount: 'desc' }),
-            fetchList({ updatedAt: 'desc' }),
-            fetchList({ createdAt: 'desc' })
+            fetchList({ followedCount: 'desc' }), // Trending
+            fetchList({ updatedAt: 'desc' }),     // Latest
+            fetchList({ createdAt: 'desc' })      // New
         ]);
 
-        // Use async processMangaList
+        // Use async processMangaList for external covers
         const [trending, latest, newlyAdded] = await Promise.all([
             processMangaList(trendingRes.data.data),
             processMangaList(latestRes.data.data),
@@ -77,7 +72,7 @@ module.exports = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('MangaDex Lists API Error:', error.response ? error.response.data.errors : error.message);
-        res.status(500).json({ message: 'Failed to fetch lists from MangaDex API.' });
+        console.error('Lists API Error:', error.message);
+        res.status(500).json({ message: 'Failed to fetch lists.' });
     }
 };
