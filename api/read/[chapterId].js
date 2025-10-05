@@ -8,25 +8,33 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   try {
-    // FIXED: The variable name now correctly matches the filename `[chapterId].js`
     const { chapterId } = req.query;
 
     if (!chapterId) {
       return res.status(400).json({ message: 'Chapter ID is required from the URL path.' });
     }
 
-    // --- Get the MangaDex server URL for the chapter images ---
     const serverResponse = await axios({
       method: 'GET',
       url: `${API_BASE_URL}/at-home/server/${chapterId}`,
     });
 
     const { baseUrl, chapter: chapterData } = serverResponse.data;
-    const { hash, data: pageFilenames } = chapterData;
+    const { hash, data: pageFilenames, dataSaver: pageFilenamesDataSaver } = chapterData;
 
-    // --- Construct the full URL for each page image ---
-    const imageUrls = pageFilenames.map(filename => {
-      return `${baseUrl}/data/${hash}/${filename}`;
+    // --- INTELLIGENT FALLBACK LOGIC ---
+    let pages = pageFilenames;
+    let mode = 'data';
+
+    // If the high-quality 'data' list is empty, use the 'dataSaver' list instead.
+    if (!pages || pages.length === 0) {
+      pages = pageFilenamesDataSaver;
+      mode = 'data-saver';
+    }
+    // --- END OF FALLBACK LOGIC ---
+
+    const imageUrls = pages.map(filename => {
+      return `${baseUrl}/${mode}/${hash}/${filename}`;
     });
 
     res.status(200).json({
