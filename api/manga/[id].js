@@ -14,15 +14,19 @@ module.exports = async (req, res) => {
     const manga = mangaRes.data.data;
 
     // Get chapters for manga
-    const chaptersRes = await axios.get('https://kitsu.io/api/edge/manga-chapters', {
-      params: { 'filter[manga]': id, 'page[limit]': 500, 'sort': 'number' }
-    });
-
-    const chapters = chaptersRes.data.data.map(chap => ({
-      chapterId: chap.id,
-      chapterTitle: `Chapter ${chap.attributes.number}` + (chap.attributes.titles?.en ? `: ${chap.attributes.titles.en}` : ''),
-      synopsis: chap.attributes.synopsis
-    }));
+    let chapters = [];
+    try {
+      const chaptersRes = await axios.get('https://kitsu.io/api/edge/manga-chapters', {
+        params: { 'filter[manga]': id, 'page[limit]': 500, 'sort': 'number' }
+      });
+      chapters = chaptersRes.data.data.map(chap => ({
+        chapterId: chap.id,
+        chapterTitle: `Chapter ${chap.attributes.number}` + (chap.attributes.titles?.en ? `: ${chap.attributes.titles.en}` : ''),
+        synopsis: chap.attributes.synopsis
+      }));
+    } catch (e) {
+      // If fetching chapters fails, keep chapters as []
+    }
 
     res.status(200).json({
       id: manga.id,
@@ -32,7 +36,7 @@ module.exports = async (req, res) => {
       genres: manga.attributes.categories || [],
       description: manga.attributes.synopsis,
       coverImage: manga.attributes.posterImage?.large || 'https://via.placeholder.com/512?text=No+Cover',
-      chapters: chapters,
+      chapters, // Always an array!
     });
 
   } catch (error) {
