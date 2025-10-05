@@ -1,10 +1,9 @@
 const axios = require('axios');
-const { URLSearchParams } = require('url');
 
 const API_BASE_URL = 'https://api.mangadex.org';
 
-// Helper function to process the API response into our simple format
 const processMangaList = (mangaData) => {
+    if (!mangaData) return [];
     return mangaData.map(manga => {
         const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
         const coverFilename = coverArt ? coverArt.attributes.fileName : null;
@@ -16,29 +15,23 @@ const processMangaList = (mangaData) => {
             id: manga.id,
             title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
             imgUrl: imgUrl,
-            description: manga.attributes.description.en || '',
         };
     });
 };
 
-// Helper function to fetch a specific list from MangaDex
-const fetchList = (order) => {
-    const params = new URLSearchParams();
-    params.append('limit', 15);
-    params.append('includes[]', 'cover_art');
-
-    // FIXED: Correctly add multiple values for the same parameter key
-    const ratings = ['safe', 'suggestive', 'erotica', 'pornographic'];
-    ratings.forEach(rating => params.append('contentRating[]', rating));
-    
-    // Add the order parameter
-    for (const key in order) {
-        params.append(`order[${key}]`, order[key]);
-    }
-
-    return axios.get(`${API_BASE_URL}/manga?${params.toString()}`);
+const fetchList = (orderParams) => {
+    return axios({
+        method: 'GET',
+        url: `${API_BASE_URL}/manga`,
+        params: {
+            limit: 15,
+            'includes[]': ['cover_art'],
+            'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
+            hasAvailableChapters: 'true', // Only get manga with chapters
+            order: orderParams,
+        }
+    });
 };
-
 
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -46,11 +39,10 @@ module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     try {
-        // Use Promise.all to run all three requests in parallel for speed
         const [trendingRes, latestRes, newRes] = await Promise.all([
-            fetchList({ followedCount: 'desc' }), // Trending manga
-            fetchList({ updatedAt: 'desc' }),     // Latest updates
-            fetchList({ createdAt: 'desc' })      // Newly created manga
+            fetchList({ followedCount: 'desc' }), // Trending
+            fetchList({ updatedAt: 'desc' }),     // Latest
+            fetchList({ createdAt: 'desc' })      // New
         ]);
 
         res.status(200).json({
@@ -60,7 +52,7 @@ module.exports = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('MangaDex Lists API Error:', error.response ? error.response.data : error.message);
+        console.error('MangaDex Lists API Error:', error.response ? error.response.data.errors : error.message);
         res.status(500).json({ message: 'Failed to fetch lists from MangaDex API.' });
     }
 };
