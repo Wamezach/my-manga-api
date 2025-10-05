@@ -1,37 +1,33 @@
 const axios = require('axios');
 
-// This is the new base URL for the official MangaDex API
 const API_BASE_URL = 'https://api.mangadex.org';
 
 module.exports = async (req, res) => {
-  // Standard CORS headers to allow your HTML file to call this API
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   try {
     const page = parseInt(req.query.page || '1', 10);
-    const limit = 24; // How many manga to fetch per page
+    const limit = 24;
     const offset = (page - 1) * limit;
 
-    // Request the list of manga from MangaDex
     const response = await axios({
       method: 'GET',
       url: `${API_BASE_URL}/manga`,
       params: {
         limit: limit,
         offset: offset,
-        order: { latestUploadedAt: 'desc' }, // Order by latest updates
-        'includes[]': ['cover_art'], // Ask the API to include cover art data
-        'contentRating[]': ['safe', 'suggestive'], // Filter content ratings
+        // FIXED: Changed 'latestUploadedAt' to the correct 'updatedAt'
+        order: { updatedAt: 'desc' },
+        'includes[]': ['cover_art'],
+        'contentRating[]': ['safe', 'suggestive'],
       },
     });
 
-    // Transform the complex MangaDex data into the simple format our HTML needs
     const mangaList = response.data.data.map(manga => {
       const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
       const coverFilename = coverArt ? coverArt.attributes.fileName : null;
-      // Construct the full image URL
       const imgUrl = coverFilename
         ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.256.jpg`
         : 'https://via.placeholder.com/256/1f2937/d1d5db.png?text=No+Cover';
