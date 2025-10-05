@@ -2,14 +2,17 @@ const axios = require('axios');
 
 const API_BASE_URL = 'https://api.mangadex.org';
 
+// Set this to your deployed Vercel proxy app!
+const COVER_PROXY_BASE = 'https://your-vercel-app.vercel.app/api/image-proxy';
+
 const processMangaList = (mangaData) => {
     if (!mangaData) return [];
     return mangaData.map(manga => {
         const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
-        // Ensure filename includes extension (e.g., .png, .jpg)
         const coverFilename = coverArt ? coverArt.attributes.fileName : null;
+        // Use proxy for covers
         const imgUrl = (coverFilename && manga.id)
-            ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
+            ? `${COVER_PROXY_BASE}?mangaId=${manga.id}&coverFilename=${coverFilename}.512.jpg`
             : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
 
         return {
