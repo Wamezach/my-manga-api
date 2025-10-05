@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-// Fast cover fetch from Jikan API (MyAnimeList)
+// Get cover image from Jikan (MyAnimeList) by manga title
 async function getCoverFromJikan(title) {
   try {
     const res = await axios.get('https://api.jikan.moe/v4/manga', { params: { q: title, limit: 1 } });
