@@ -5,9 +5,14 @@ const API_BASE_URL = 'https://api.mangadex.org';
 const processMangaList = (mangaData) => {
     if (!mangaData) return [];
     return mangaData.map(manga => {
+        // Find the cover_art relationship
         const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
-        const coverFilename = coverArt ? coverArt.attributes.fileName : null;
+        // The correct filename with extension
+        const coverFilename = coverArt && coverArt.attributes && coverArt.attributes.fileName
+            ? coverArt.attributes.fileName
+            : null;
         const imgUrl = coverFilename
+            // IMPORTANT: filename includes extension!
             ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
             : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
 
@@ -27,7 +32,7 @@ const fetchList = (orderParams) => {
             limit: 15,
             'includes[]': ['cover_art'],
             'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
-            hasAvailableChapters: 'true', // Only get manga with chapters
+            hasAvailableChapters: 'true',
             order: orderParams,
         }
     });
@@ -40,9 +45,9 @@ module.exports = async (req, res) => {
 
     try {
         const [trendingRes, latestRes, newRes] = await Promise.all([
-            fetchList({ followedCount: 'desc' }), // Trending
-            fetchList({ updatedAt: 'desc' }),     // Latest
-            fetchList({ createdAt: 'desc' })      // New
+            fetchList({ followedCount: 'desc' }),
+            fetchList({ updatedAt: 'desc' }),
+            fetchList({ createdAt: 'desc' })
         ]);
 
         res.status(200).json({
