@@ -6,16 +6,12 @@ const processMangaList = (mangaData) => {
   if (!mangaData) return [];
   return mangaData.map(manga => {
     let imgUrl = 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
-
     if (Array.isArray(manga.relationships)) {
-      // Find cover_art relationship
       const coverArt = manga.relationships.find(rel => rel.type === 'cover_art' && rel.attributes && rel.attributes.fileName);
-
-      if (coverArt && coverArt.attributes.fileName) {
+      if (coverArt) {
         imgUrl = `https://uploads.mangadex.org/covers/${manga.id}/${coverArt.attributes.fileName}.512.jpg`;
       }
     }
-
     return {
       id: manga.id,
       title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
@@ -30,7 +26,7 @@ const fetchList = (orderParams) => {
     url: `${API_BASE_URL}/manga`,
     params: {
       limit: 15,
-      'includes[]': 'cover_art', // Use string for Axios compatibility
+      'includes[]': 'cover_art',
       'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
       hasAvailableChapters: true,
       order: orderParams,
@@ -52,9 +48,6 @@ module.exports = async (req, res) => {
       fetchList({ updatedAt: 'desc' }),
       fetchList({ createdAt: 'desc' })
     ]);
-
-    // Debug: log the first manga relationships
-    console.log('TRENDING RELATIONSHIPS:', JSON.stringify(trendingRes.data.data[0]?.relationships, null, 2));
 
     res.status(200).json({
       trending: processMangaList(trendingRes.data.data),
