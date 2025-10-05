@@ -16,7 +16,11 @@ module.exports = async (req, res) => {
 
     // Note: The source site uses the full chapter ID, e.g., "chapter-1"
     const siteUrl = `https://ww8.mangakakalot.tv/chapter/${id}/${chapter}`;
-    const { data } = await axios.get(siteUrl);
+const { data } = await axios.get(siteUrl, {
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+  }
+});
     const $ = cheerio.load(data);
 
     const imageUrls = [];
