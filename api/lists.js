@@ -1,14 +1,15 @@
 const axios = require('axios');
 
-// Helper: Get manga from Kitsu by filter (e.g. trending, latest, etc.)
-async function getKitsuMangaList(params = {}) {
-  const res = await axios.get('https://kitsu.io/api/edge/manga', { params });
-  return res.data.data.map(manga => ({
+const BASE_URL = 'https://api.consumet.org/manga/mangakakalot';
+
+async function getList(type = "popular", page = 1) {
+  const res = await axios.get(`${BASE_URL}/${type}?page=${page}`);
+  return res.data.results.map(manga => ({
     id: manga.id,
-    title: manga.attributes.canonicalTitle,
-    imgUrl: manga.attributes.posterImage?.medium || 'https://via.placeholder.com/256?text=No+Cover',
-    synopsis: manga.attributes.synopsis,
-    status: manga.attributes.status,
+    title: manga.title,
+    imgUrl: manga.image,
+    url: manga.url,
+    latestChapter: manga.latestChapter || "",
   }));
 }
 
@@ -19,14 +20,13 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    // Example fetches: Trending, Latest, Newly Added
     const [trending, latest, newlyAdded] = await Promise.all([
-      getKitsuMangaList({ 'sort': 'popularityRank', 'page[limit]': 15 }),
-      getKitsuMangaList({ 'sort': '-updatedAt', 'page[limit]': 15 }),
-      getKitsuMangaList({ 'sort': '-createdAt', 'page[limit]': 15 }),
+      getList("popular"),
+      getList("latest"),
+      getList("new"),
     ]);
     res.status(200).json({ trending, latest, newlyAdded });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch lists from Kitsu API.' });
+    res.status(500).json({ message: 'Failed to fetch lists from MangaKakalot.' });
   }
 };
