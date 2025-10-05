@@ -9,7 +9,7 @@ const processMangaList = (mangaData) => {
         const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
         const coverFilename = coverArt ? coverArt.attributes.fileName : null;
         const imgUrl = coverFilename
-            ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg` // Use higher quality images
+            ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
             : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
 
         return {
@@ -23,11 +23,14 @@ const processMangaList = (mangaData) => {
 
 // Helper function to fetch a specific list from MangaDex
 const fetchList = (order) => {
-    const params = new URLSearchParams({
-        limit: 15, // Get 15 items for the carousel
-        'includes[]': 'cover_art',
-        'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'], // Include all ratings as requested
-    });
+    const params = new URLSearchParams();
+    params.append('limit', 15);
+    params.append('includes[]', 'cover_art');
+
+    // FIXED: Correctly add multiple values for the same parameter key
+    const ratings = ['safe', 'suggestive', 'erotica', 'pornographic'];
+    ratings.forEach(rating => params.append('contentRating[]', rating));
+    
     // Add the order parameter
     for (const key in order) {
         params.append(`order[${key}]`, order[key]);
