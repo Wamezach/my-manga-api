@@ -8,11 +8,12 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   try {
-    // Note: The 'id' from the query is the MANGA id, but the 'chapter' is the CHAPTER id.
+    // The 'id' is the manga ID, and 'chapter' is the chapter ID from the URL
+    // e.g., /api/read/MANGA_ID/CHAPTER_ID
     const { chapter: chapterId } = req.query;
 
     if (!chapterId) {
-      return res.status(400).json({ message: 'Chapter ID is required.' });
+      return res.status(400).json({ message: 'Chapter ID is required from the URL path.' });
     }
 
     // --- Get the MangaDex server URL for the chapter images ---
@@ -22,22 +23,22 @@ module.exports = async (req, res) => {
     });
 
     const { baseUrl, chapter: chapterData } = serverResponse.data;
-    const { hash, data: pageFilenames } = chapterData;
+    const { hash, data: pageFilenames, dataSaver: pageFilenamesDataSaver } = chapterData;
 
     // --- Construct the full URL for each page image ---
     const imageUrls = pageFilenames.map(filename => {
-      // The final URL is a combination of the base URL, the data mode, the hash, and the filename
+      // The final URL is a combination of the base URL, 'data' mode, the hash, and the filename
       return `${baseUrl}/data/${hash}/${filename}`;
     });
 
     res.status(200).json({
-      title: 'Manga Chapter', // Title info isn't in this endpoint, can be fetched separately if needed
+      title: 'Manga Chapter',
       chapter: chapterId,
       imageUrls: imageUrls,
     });
 
   } catch (error) {
-    console.error('MangaDex API Error:', error.response ? error.response.data : error.message);
+    console.error('MangaDex Chapter API Error:', error.response ? error.response.data.errors : error.message);
     if (error.response && error.response.status === 404) {
       return res.status(404).json({ message: 'Chapter not found on MangaDex.' });
     }
