@@ -11,7 +11,11 @@ module.exports = async (req, res) => {
     const { page = '1' } = req.query; // Default to page 1 if not provided
 
     const siteUrl = `https://mangakakalot.tv/manga_list?type=latest&category=all&state=all&page=${page}`;
-    const { data } = await axios.get(siteUrl);
+const { data } = await axios.get(siteUrl, {
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+  }
+});
     const $ = cheerio.load(data);
 
     // --- Scrape Manga Data ---
