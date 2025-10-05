@@ -1,18 +1,28 @@
 const axios = require('axios');
 
 const MANGADEX_API_BASE_URL = 'https://api.mangadex.org';
-const KITSU_API_BASE_URL = 'https://kitsu.io/api/edge/manga';
+const ANILIST_API_URL = 'https://graphql.anilist.co';
 
-// Get cover image from Kitsu by title
-const getExternalCover = async (title) => {
-    try {
-        const res = await axios.get(KITSU_API_BASE_URL, {
-            params: { 'filter[text]': title }
-        });
-        if (res.data.data.length > 0 && res.data.data[0].attributes.posterImage) {
-            // Use the original or large poster image
-            return res.data.data[0].attributes.posterImage.original || res.data.data[0].attributes.posterImage.large;
+// Get cover image from AniList by title
+const getAniListCover = async (title) => {
+    const query = `
+        query ($search: String) {
+            Media(search: $search, type: MANGA) {
+                coverImage {
+                    large
+                    extraLarge
+                    medium
+                }
+            }
         }
+    `;
+    const variables = { search: title };
+    try {
+        const res = await axios.post(ANILIST_API_URL, { query, variables });
+        const cover = res.data.data.Media?.coverImage;
+        if (cover?.extraLarge) return cover.extraLarge;
+        if (cover?.large) return cover.large;
+        if (cover?.medium) return cover.medium;
     } catch (e) {
         // Optionally log error
     }
@@ -24,7 +34,7 @@ const processMangaList = async (mangaData) => {
     if (!mangaData) return [];
     return await Promise.all(mangaData.map(async manga => {
         const title = manga.attributes.title.en || Object.values(manga.attributes.title)[0];
-        const imgUrl = await getExternalCover(title);
+        const imgUrl = await getAniListCover(title);
         return {
             id: manga.id,
             title,
