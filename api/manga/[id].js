@@ -1,7 +1,5 @@
 const axios = require('axios');
 
-const API_BASE_URL = 'https://api.mangadex.org';
-
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
@@ -9,52 +7,35 @@ module.exports = async (req, res) => {
 
   try {
     const { id } = req.query;
+    if (!id) return res.status(400).json({ message: 'Manga id is required.' });
 
-    // --- Get Manga Details ---
-    const mangaResponse = await axios({
-      method: 'GET',
-      url: `${API_BASE_URL}/manga/${id}`,
-      params: {
-        'includes[]': ['cover_art', 'author'],
-      },
+    // Get manga detail
+    const mangaRes = await axios.get(`https://kitsu.io/api/edge/manga/${id}`);
+    const manga = mangaRes.data.data;
+
+    // Get chapters for manga
+    const chaptersRes = await axios.get('https://kitsu.io/api/edge/manga-chapters', {
+      params: { 'filter[manga]': id, 'page[limit]': 500, 'sort': 'number' }
     });
 
-    const manga = mangaResponse.data.data;
-
-    // --- Get Chapter List ---
-    const chapterResponse = await axios({
-        method: 'GET',
-        url: `${API_BASE_URL}/manga/${id}/feed`,
-        params: {
-            limit: 500, // Get up to 500 chapters
-            order: { chapter: 'asc' }, // Order by chapter number, ascending
-            'translatedLanguage[]': ['en'] // Only get English chapters
-        }
-    });
-
-    // --- Process the Data ---
-    const author = manga.relationships.find(rel => rel.type === 'author')?.attributes.name || 'Unknown';
-    const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
-    const coverImage = `https://uploads.mangadex.org/covers/${manga.id}/${coverArt.attributes.fileName}`;
-    
-    const chapters = chapterResponse.data.data.map(chap => ({
-        chapterId: chap.id,
-        chapterTitle: `Chapter ${chap.attributes.chapter}` + (chap.attributes.title ? `: ${chap.attributes.title}`: '')
+    const chapters = chaptersRes.data.data.map(chap => ({
+      chapterId: chap.id,
+      chapterTitle: `Chapter ${chap.attributes.number}` + (chap.attributes.titles?.en ? `: ${chap.attributes.titles.en}` : ''),
+      synopsis: chap.attributes.synopsis
     }));
 
     res.status(200).json({
       id: manga.id,
-      title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
-      author: author,
+      title: manga.attributes.canonicalTitle,
+      author: manga.attributes.author || 'Unknown',
       status: manga.attributes.status,
-      genres: manga.attributes.tags.filter(tag => tag.attributes.group === 'genre').map(tag => tag.attributes.name.en),
-      description: manga.attributes.description.en || 'No description available.',
-      coverImage: coverImage,
+      genres: manga.attributes.categories || [],
+      description: manga.attributes.synopsis,
+      coverImage: manga.attributes.posterImage?.large || 'https://via.placeholder.com/512?text=No+Cover',
       chapters: chapters,
     });
 
   } catch (error) {
-    console.error('MangaDex API Error:', error.response ? error.response.data : error.message);
-    res.status(500).json({ message: 'Failed to fetch manga details from MangaDex API.' });
+    res.status(500).json({ message: 'Failed to fetch manga details from Kitsu API.' });
   }
 };
