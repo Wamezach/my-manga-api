@@ -37,7 +37,7 @@ module.exports = async (req, res) => {
 
     // Return proxy URLs for each image
     const imageUrls = pages.map(filename => 
-      `${VERCEL_API_URL}/api/proxy-chapter-image?baseUrl=${encodeURIComponent(baseUrl)}&mode=${encodeURIComponent(mode)}&hash=${encodeURIComponent(hash)}&filename=${encodeURIComponent(filename)}`
+      `${VERCEL_API_URL}/api/proxy-cover?baseUrl=${encodeURIComponent(baseUrl)}&mode=${encodeURIComponent(mode)}&hash=${encodeURIComponent(hash)}&filename=${encodeURIComponent(filename)}`
     );
 
     res.status(200).json({
