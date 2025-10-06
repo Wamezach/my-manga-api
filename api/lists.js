@@ -8,7 +8,7 @@ const processMangaList = (mangaData) => {
         const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
         const coverFilename = coverArt ? coverArt.attributes.fileName : null;
         const imgUrl = coverFilename
-            ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
+            ? `/api/proxy-cover?id=${manga.id}&filename=${coverFilename}.512.jpg`
             : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
 
         return {
