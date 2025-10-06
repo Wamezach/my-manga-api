@@ -1,6 +1,5 @@
 const axios = require('axios');
 
-const VERCEL_API_URL = 'https://my-manga-api.vercel.app'; // Replace with your Vercel deployment URL
 const API_BASE_URL = 'https://api.mangadex.org';
 
 module.exports = async (req, res) => {
@@ -10,6 +9,7 @@ module.exports = async (req, res) => {
 
   try {
     const { chapterId } = req.query;
+
     if (!chapterId) {
       return res.status(400).json({ message: 'Chapter ID is required from the URL path.' });
     }
@@ -25,19 +25,20 @@ module.exports = async (req, res) => {
     let pages = pageFilenames;
     let mode = 'data';
 
+    // If the high-quality 'data' list is empty or doesn't exist, try the 'data-saver' list.
     if (!pages || pages.length === 0) {
       pages = pageFilenamesDataSaver;
       mode = 'data-saver';
     }
 
+    // FINAL FIX: If BOTH lists are empty, create an empty array to prevent errors.
     if (!pages) {
       pages = [];
     }
 
-    // Use proxy-cover.js for chapter images
-    const imageUrls = pages.map(filename =>
-      `${VERCEL_API_URL}/api/proxy-cover?id=${chapterId}&filename=${encodeURIComponent(`${mode}/${hash}/${filename}`)}`
-    );
+    const imageUrls = pages.map(filename => {
+      return `${baseUrl}/${mode}/${hash}/${filename}`;
+    });
 
     res.status(200).json({
       title: 'Manga Chapter',
