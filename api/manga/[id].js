@@ -3,8 +3,8 @@ const VERCEL_API_URL = 'https://my-manga-api.vercel.app'; // Change to your depl
 
 const API_BASE_URL = 'https://api.mangadex.org';
 
-// Preferred language codes in order
-const PREFERRED_LANGUAGES = ['en', 'en-gb', 'en-ca', 'pt-br'];
+// All English variants for MangaDex
+const ENGLISH_VARIANTS = ['en', 'en-gb', 'en-ca', 'en-au', 'en-nz', 'en-ie', 'en-za', 'en-in'];
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -35,7 +35,7 @@ module.exports = async (req, res) => {
       },
     });
 
-    // --- Process Chapters: Pick only preferred language per chapter number ---
+    // --- Process Chapters: Collect all English variants per chapter number ---
     // Group chapters by chapter number
     const chaptersByNumber = {};
     for (const chap of chapterResponse.data.data) {
@@ -43,28 +43,26 @@ module.exports = async (req, res) => {
       if (!chapNum) continue; // skip if no chapter number
 
       if (!chaptersByNumber[chapNum]) chaptersByNumber[chapNum] = [];
-
       chaptersByNumber[chapNum].push(chap);
     }
 
-    // For each chapter number, pick preferred language
-    const chapters = Object.keys(chaptersByNumber).sort((a, b) => Number(a) - Number(b)).map(chapNum => {
-      const group = chaptersByNumber[chapNum];
-      // Find the preferred language
-      let chosen = null;
-      for (const lang of PREFERRED_LANGUAGES) {
-        chosen = group.find(chap => chap.attributes.translatedLanguage === lang);
-        if (chosen) break;
-      }
-      // If none, pick the first available
-      if (!chosen) chosen = group[0];
-
-      return {
-        chapterId: chosen.id,
-        chapterTitle: `Chapter ${chosen.attributes.chapter}` + (chosen.attributes.title ? `: ${chosen.attributes.title}` : ''),
-        translatedLanguage: chosen.attributes.translatedLanguage
-      };
-    });
+    // For each chapter number, include all English variants (and optionally others if desired)
+    const chapters = Object.keys(chaptersByNumber)
+      .sort((a, b) => Number(a) - Number(b))
+      .flatMap(chapNum => {
+        const group = chaptersByNumber[chapNum];
+        // Find all English variants for this chapter number
+        const englishChapters = group.filter(chap =>
+          ENGLISH_VARIANTS.includes(chap.attributes.translatedLanguage)
+        );
+        // If no English, include all available languages
+        const selectedChapters = englishChapters.length > 0 ? englishChapters : group;
+        return selectedChapters.map(chosen => ({
+          chapterId: chosen.id,
+          chapterTitle: `Chapter ${chosen.attributes.chapter}` + (chosen.attributes.title ? `: ${chosen.attributes.title}` : ''),
+          translatedLanguage: chosen.attributes.translatedLanguage
+        }));
+      });
 
     // --- Cover logic unchanged ---
     const author = manga.relationships.find(rel => rel.type === 'author')?.attributes?.name || 'Unknown';
