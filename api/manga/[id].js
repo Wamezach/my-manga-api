@@ -35,45 +35,46 @@ module.exports = async (req, res) => {
       },
     });
 
-    // --- Group chapters by translatedLanguage ---
+    // --- Group chapters by chapter number ---
     const chaptersRaw = chapterResponse.data.data;
-    const variantCounts = {};
-    ENGLISH_VARIANTS.forEach(variant => variantCounts[variant] = 0);
+    const chaptersByNumber = {};
 
     chaptersRaw.forEach(chap => {
-      if (ENGLISH_VARIANTS.includes(chap.attributes.translatedLanguage)) {
-        variantCounts[chap.attributes.translatedLanguage]++;
-      }
+      const chapNum = chap.attributes.chapter;
+      if (!chapNum) return; // skip if no chapter number
+      if (!chaptersByNumber[chapNum]) chaptersByNumber[chapNum] = [];
+      chaptersByNumber[chapNum].push(chap);
     });
 
-    // Find the variant with the most chapters
-    let maxCount = 0;
-    let chosenVariant = null;
-    for (const variant of ENGLISH_VARIANTS) {
-      if (variantCounts[variant] > maxCount) {
-        maxCount = variantCounts[variant];
-        chosenVariant = variant;
-      }
-    }
+    // For each chapter number, collect all English alternatives (and optionally others)
+    const chapters = Object.keys(chaptersByNumber)
+      .sort((a, b) => Number(a) - Number(b))
+      .map(chapNum => {
+        const group = chaptersByNumber[chapNum];
 
-    // Filter chapters to only use the chosen variant (if any)
-    let chapters;
-    if (chosenVariant) {
-      chapters = chaptersRaw
-        .filter(chap => chap.attributes.translatedLanguage === chosenVariant)
-        .map(chosen => ({
-          chapterId: chosen.id,
-          chapterTitle: `Chapter ${chosen.attributes.chapter}` + (chosen.attributes.title ? `: ${chosen.attributes.title}` : ''),
-          translatedLanguage: chosen.attributes.translatedLanguage
-        }));
-    } else {
-      // If no English variant chapters, show all chapters (all languages)
-      chapters = chaptersRaw.map(chosen => ({
-        chapterId: chosen.id,
-        chapterTitle: `Chapter ${chosen.attributes.chapter}` + (chosen.attributes.title ? `: ${chosen.attributes.title}` : ''),
-        translatedLanguage: chosen.attributes.translatedLanguage
-      }));
-    }
+        // All English alternatives for this chapter
+        const englishAlternatives = group
+          .filter(chap => ENGLISH_VARIANTS.includes(chap.attributes.translatedLanguage))
+          .map(chap => ({
+            chapterId: chap.id,
+            chapterTitle: `Chapter ${chap.attributes.chapter}` + (chap.attributes.title ? `: ${chap.attributes.title}` : ''),
+            translatedLanguage: chap.attributes.translatedLanguage,
+            // Optionally, you can include scan group or uploader info
+            groupName: chap.relationships.find(rel => rel.type === 'scanlation_group')?.attributes?.name || '',
+            uploader: chap.relationships.find(rel => rel.type === 'user')?.attributes?.username || ''
+          }));
+
+        // Optionally, you can include non-English chapters if you want
+        // const otherAlternatives = group
+        //   .filter(chap => !ENGLISH_VARIANTS.includes(chap.attributes.translatedLanguage))
+        //   .map(chap => ({ ... }));
+
+        return {
+          chapterNumber: chapNum,
+          englishAlternatives: englishAlternatives,
+          // otherAlternatives: otherAlternatives, // Uncomment if you want to show other languages too
+        };
+      });
 
     // --- Cover logic unchanged ---
     const author = manga.relationships.find(rel => rel.type === 'author')?.attributes?.name || 'Unknown';
@@ -92,7 +93,6 @@ module.exports = async (req, res) => {
       description: manga.attributes.description.en || 'No description available.',
       coverImage: coverImage,
       chapters: chapters,
-      chosenEnglishVariant: chosenVariant // optional, for frontend
     });
 
   } catch (error) {
