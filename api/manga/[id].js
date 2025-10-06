@@ -29,7 +29,7 @@ module.exports = async (req, res) => {
       params: {
         limit: 500,
         order: { chapter: 'asc' },
-        'translatedLanguage[]': ['en'],
+        // REMOVE 'translatedLanguage[]': ['en'] to get all chapters in all languages!
       },
     });
 
@@ -44,6 +44,7 @@ module.exports = async (req, res) => {
     const chapters = chapterResponse.data.data.map(chap => ({
       chapterId: chap.id,
       chapterTitle: `Chapter ${chap.attributes.chapter}` + (chap.attributes.title ? `: ${chap.attributes.title}` : ''),
+      translatedLanguage: chap.attributes.translatedLanguage // Optional: show language in frontend
     }));
 
     res.status(200).json({
