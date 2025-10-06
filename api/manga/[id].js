@@ -1,6 +1,8 @@
 const axios = require('axios');
 
 const API_BASE_URL = 'https://api.mangadex.org';
+// Always use your Vercel deployment for proxying images
+const VERCEL_API_URL = 'https://my-manga-api.vercel.app';
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -35,8 +37,12 @@ module.exports = async (req, res) => {
     // --- Process the Data ---
     const author = manga.relationships.find(rel => rel.type === 'author')?.attributes.name || 'Unknown';
     const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
-    const coverImage = `https://uploads.mangadex.org/covers/${manga.id}/${coverArt.attributes.fileName}`;
-    
+    const coverFilename = coverArt ? coverArt.attributes.fileName : null;
+    // Use proxied URL for cover image
+    const coverImage = coverFilename
+      ? `${VERCEL_API_URL}/api/proxy-cover?id=${manga.id}&filename=${coverFilename}.512.jpg`
+      : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
+
     const chapters = chapterResponse.data.data.map(chap => ({
         chapterId: chap.id,
         chapterTitle: `Chapter ${chap.attributes.chapter}` + (chap.attributes.title ? `: ${chap.attributes.title}`: '')
