@@ -29,7 +29,6 @@ module.exports = async (req, res) => {
       return res.status(404).json({ message: 'No images found for this chapter.' });
     }
 
-    // Use direct MangaDex URLs (recommended for reliability)
     const imageUrls = pages.map(filename =>
       `${baseUrl}/${mode}/${hash}/${filename}`
     );
