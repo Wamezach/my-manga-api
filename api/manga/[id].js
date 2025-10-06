@@ -35,34 +35,45 @@ module.exports = async (req, res) => {
       },
     });
 
-    // --- Process Chapters: Collect all English variants per chapter number ---
-    // Group chapters by chapter number
-    const chaptersByNumber = {};
-    for (const chap of chapterResponse.data.data) {
-      const chapNum = chap.attributes.chapter;
-      if (!chapNum) continue; // skip if no chapter number
+    // --- Group chapters by translatedLanguage ---
+    const chaptersRaw = chapterResponse.data.data;
+    const variantCounts = {};
+    ENGLISH_VARIANTS.forEach(variant => variantCounts[variant] = 0);
 
-      if (!chaptersByNumber[chapNum]) chaptersByNumber[chapNum] = [];
-      chaptersByNumber[chapNum].push(chap);
+    chaptersRaw.forEach(chap => {
+      if (ENGLISH_VARIANTS.includes(chap.attributes.translatedLanguage)) {
+        variantCounts[chap.attributes.translatedLanguage]++;
+      }
+    });
+
+    // Find the variant with the most chapters
+    let maxCount = 0;
+    let chosenVariant = null;
+    for (const variant of ENGLISH_VARIANTS) {
+      if (variantCounts[variant] > maxCount) {
+        maxCount = variantCounts[variant];
+        chosenVariant = variant;
+      }
     }
 
-    // For each chapter number, include all English variants (and optionally others if desired)
-    const chapters = Object.keys(chaptersByNumber)
-      .sort((a, b) => Number(a) - Number(b))
-      .flatMap(chapNum => {
-        const group = chaptersByNumber[chapNum];
-        // Find all English variants for this chapter number
-        const englishChapters = group.filter(chap =>
-          ENGLISH_VARIANTS.includes(chap.attributes.translatedLanguage)
-        );
-        // If no English, include all available languages
-        const selectedChapters = englishChapters.length > 0 ? englishChapters : group;
-        return selectedChapters.map(chosen => ({
+    // Filter chapters to only use the chosen variant (if any)
+    let chapters;
+    if (chosenVariant) {
+      chapters = chaptersRaw
+        .filter(chap => chap.attributes.translatedLanguage === chosenVariant)
+        .map(chosen => ({
           chapterId: chosen.id,
           chapterTitle: `Chapter ${chosen.attributes.chapter}` + (chosen.attributes.title ? `: ${chosen.attributes.title}` : ''),
           translatedLanguage: chosen.attributes.translatedLanguage
         }));
-      });
+    } else {
+      // If no English variant chapters, show all chapters (all languages)
+      chapters = chaptersRaw.map(chosen => ({
+        chapterId: chosen.id,
+        chapterTitle: `Chapter ${chosen.attributes.chapter}` + (chosen.attributes.title ? `: ${chosen.attributes.title}` : ''),
+        translatedLanguage: chosen.attributes.translatedLanguage
+      }));
+    }
 
     // --- Cover logic unchanged ---
     const author = manga.relationships.find(rel => rel.type === 'author')?.attributes?.name || 'Unknown';
@@ -81,6 +92,7 @@ module.exports = async (req, res) => {
       description: manga.attributes.description.en || 'No description available.',
       coverImage: coverImage,
       chapters: chapters,
+      chosenEnglishVariant: chosenVariant // optional, for frontend
     });
 
   } catch (error) {
