@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   try {
     const response = await axios.get(url, { responseType: 'arraybuffer' });
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', response.headers['content-type']);
+    res.setHeader('Content-Type', response.headers['content-type'] || 'image/jpeg');
     res.send(response.data);
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch image.' });
