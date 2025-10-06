@@ -1,5 +1,6 @@
 const axios = require('axios');
 
+const VERCEL_API_URL = 'https://my-manga-api.vercel.app'; // Replace with your Vercel deployment URL
 const API_BASE_URL = 'https://api.mangadex.org';
 
 module.exports = async (req, res) => {
@@ -13,7 +14,6 @@ module.exports = async (req, res) => {
       return res.status(400).json({ message: 'Chapter ID is required from the URL path.' });
     }
 
-    // Fetch MangaDex server info for chapter
     const serverResponse = await axios({
       method: 'GET',
       url: `${API_BASE_URL}/at-home/server/${chapterId}`,
@@ -22,22 +22,21 @@ module.exports = async (req, res) => {
     const { baseUrl, chapter: chapterData } = serverResponse.data;
     const { hash, data: pageFilenames, dataSaver: pageFilenamesDataSaver } = chapterData;
 
-    let pages = pageFilenames && pageFilenames.length > 0 ? pageFilenames : pageFilenamesDataSaver;
-    let mode = (pageFilenames && pageFilenames.length > 0) ? 'data' : 'data-saver';
+    let pages = pageFilenames;
+    let mode = 'data';
 
     if (!pages || pages.length === 0) {
-      // Always return imageUrls array so frontend does not error
-      return res.status(200).json({
-        title: 'Manga Chapter',
-        chapter: chapterId,
-        imageUrls: [],
-        message: 'No images found for this chapter.',
-      });
+      pages = pageFilenamesDataSaver;
+      mode = 'data-saver';
     }
 
-    // Use direct MangaDex URLs for reliability
+    if (!pages) {
+      pages = [];
+    }
+
+    // Use proxy-cover.js for chapter images
     const imageUrls = pages.map(filename =>
-      `${baseUrl}/${mode}/${hash}/${filename}`
+      `${VERCEL_API_URL}/api/proxy-cover?id=${chapterId}&filename=${encodeURIComponent(`${mode}/${hash}/${filename}`)}`
     );
 
     res.status(200).json({
@@ -48,12 +47,9 @@ module.exports = async (req, res) => {
 
   } catch (error) {
     console.error('MangaDex Chapter API Error:', error.response ? error.response.data.errors : error.message);
-    // Always return empty imageUrls array on error for frontend safety
-    res.status(200).json({
-      title: 'Manga Chapter',
-      chapter: req.query.chapterId,
-      imageUrls: [],
-      message: 'Failed to fetch chapter images from MangaDex API.',
-    });
+    if (error.response && error.response.status === 404) {
+      return res.status(404).json({ message: 'Chapter not found on MangaDex.' });
+    }
+    res.status(500).json({ message: 'Failed to fetch chapter images from MangaDex API.' });
   }
 };
