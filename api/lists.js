@@ -3,7 +3,7 @@ const axios = require('axios');
 const API_BASE_URL = 'https://api.mangadex.org';
 
 // Set this to your deployed Vercel proxy app!
-const COVER_PROXY_BASE = 'https://your-vercel-app.vercel.app/api/image-proxy';
+const COVER_PROXY_BASE = 'https://my-manga-api.vercel.app/api/image-proxy';
 
 const processMangaList = (mangaData) => {
     if (!mangaData) return [];
@@ -37,7 +37,7 @@ const fetchList = (orderParams) => {
     });
 };
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
     // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET');
@@ -65,4 +65,4 @@ module.exports = async (req, res) => {
         console.error('MangaDex Lists API Error:', error.response ? error.response.data.errors : error.message);
         res.status(500).json({ message: 'Failed to fetch lists from MangaDex API.' });
     }
-};
+}
