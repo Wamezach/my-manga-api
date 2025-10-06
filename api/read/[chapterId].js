@@ -1,5 +1,6 @@
 const axios = require('axios');
 
+const VERCEL_API_URL = 'https://my-manga-api.vercel.app'; // Update with your actual Vercel deployment URL
 const API_BASE_URL = 'https://api.mangadex.org';
 
 module.exports = async (req, res) => {
@@ -36,8 +37,10 @@ module.exports = async (req, res) => {
       pages = [];
     }
 
+    // Use proxy for chapter images
     const imageUrls = pages.map(filename => {
-      return `${baseUrl}/${mode}/${hash}/${filename}`;
+      // The proxy expects: /api/proxy-cover?id=<chapterId>&filename=<mode>/<hash>/<filename>
+      return `${VERCEL_API_URL}/api/proxy-cover?id=${chapterId}&filename=${encodeURIComponent(`${mode}/${hash}/${filename}`)}`;
     });
 
     res.status(200).json({
@@ -48,9 +51,12 @@ module.exports = async (req, res) => {
 
   } catch (error) {
     console.error('MangaDex Chapter API Error:', error.response ? error.response.data.errors : error.message);
-    if (error.response && error.response.status === 404) {
-      return res.status(404).json({ message: 'Chapter not found on MangaDex.' });
-    }
-    res.status(500).json({ message: 'Failed to fetch chapter images from MangaDex API.' });
+    // Always return imageUrls array (even empty) for frontend safety
+    res.status(200).json({
+      title: 'Manga Chapter',
+      chapter: req.query.chapterId,
+      imageUrls: [],
+      message: 'Failed to fetch chapter images from MangaDex API.',
+    });
   }
 };
