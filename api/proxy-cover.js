@@ -2,7 +2,7 @@ const axios = require('axios');
 
 module.exports = async (req, res) => {
   const { baseUrl, mode, hash, filename } = req.query;
-  if (!baseUrl || !mode || !hash || !filename) {
+  if(!baseUrl || !mode || !hash || !filename) {
     return res.status(400).send('Missing required image parameters');
   }
   const imageUrl = `${baseUrl}/${mode}/${hash}/${filename}`;
