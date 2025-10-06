@@ -26,9 +26,9 @@ module.exports = async (req, res) => {
       method: 'GET',
       url: `${API_BASE_URL}/manga/${id}/feed`,
       params: {
-        limit: 500, // Get up to 500 chapters
-        order: { chapter: 'asc' }, // Order by chapter number, ascending
-        'translatedLanguage[]': ['en'], // Only get English chapters
+        limit: 500,
+        order: { chapter: 'asc' },
+        'translatedLanguage[]': ['en'],
       },
     });
 
@@ -36,7 +36,6 @@ module.exports = async (req, res) => {
     const author = manga.relationships.find(rel => rel.type === 'author')?.attributes?.name || 'Unknown';
     const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
     const coverFilename = coverArt?.attributes?.fileName;
-
     // If cover exists, build the real image URL
     const coverImage = coverFilename
       ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
