@@ -35,46 +35,48 @@ module.exports = async (req, res) => {
       },
     });
 
-    // --- Group chapters by chapter number ---
     const chaptersRaw = chapterResponse.data.data;
     const chaptersByNumber = {};
 
     chaptersRaw.forEach(chap => {
       const chapNum = chap.attributes.chapter;
       if (!chapNum) return; // skip if no chapter number
+
+      // Only group chapters that belong to the current manga
       if (!chaptersByNumber[chapNum]) chaptersByNumber[chapNum] = [];
       chaptersByNumber[chapNum].push(chap);
     });
 
-    // For each chapter number, collect all English alternatives (and optionally others)
+    // For each chapter number, collect all English alternatives
     const chapters = Object.keys(chaptersByNumber)
-      .sort((a, b) => Number(a) - Number(b))
+      .sort((a, b) => parseFloat(a) - parseFloat(b))
       .map(chapNum => {
         const group = chaptersByNumber[chapNum];
 
         // All English alternatives for this chapter
         const englishAlternatives = group
-          .filter(chap => ENGLISH_VARIANTS.includes(chap.attributes.translatedLanguage))
+          .filter(chap => ENGLISH_VARIANTS.includes(chap.attributes.translatedLanguage) && !!chap.id)
           .map(chap => ({
             chapterId: chap.id,
-            chapterTitle: `Chapter ${chap.attributes.chapter}` + (chap.attributes.title ? `: ${chap.attributes.title}` : ''),
-            translatedLanguage: chap.attributes.translatedLanguage,
-            // Optionally, you can include scan group or uploader info
+            chapterTitle: chap.attributes.chapter
+              ? (chap.attributes.title
+                  ? `Chapter ${chap.attributes.chapter}: ${chap.attributes.title}`
+                  : `Chapter ${chap.attributes.chapter}`
+                )
+              : 'Untitled',
+            translatedLanguage: chap.attributes.translatedLanguage || 'EN',
             groupName: chap.relationships.find(rel => rel.type === 'scanlation_group')?.attributes?.name || '',
             uploader: chap.relationships.find(rel => rel.type === 'user')?.attributes?.username || ''
           }));
 
-        // Optionally, you can include non-English chapters if you want
-        // const otherAlternatives = group
-        //   .filter(chap => !ENGLISH_VARIANTS.includes(chap.attributes.translatedLanguage))
-        //   .map(chap => ({ ... }));
-
         return {
           chapterNumber: chapNum,
-          englishAlternatives: englishAlternatives,
-          // otherAlternatives: otherAlternatives, // Uncomment if you want to show other languages too
+          englishAlternatives
         };
-      });
+      })
+      // Optional: Only include chapters with at least one English alternative
+      // .filter(chap => chap.englishAlternatives.length > 0)
+      ;
 
     // --- Cover logic unchanged ---
     const author = manga.relationships.find(rel => rel.type === 'author')?.attributes?.name || 'Unknown';
@@ -96,7 +98,7 @@ module.exports = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('MangaDex API Error:', error.response ? error.response.data : error.message);
+    console.error('MangaDex API Error:', error.response ? JSON.stringify(error.response.data) : error.message);
     res.status(500).json({ message: 'Failed to fetch manga details from MangaDex API.' });
   }
 };
