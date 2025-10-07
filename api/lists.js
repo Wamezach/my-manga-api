@@ -1,9 +1,7 @@
 const axios = require('axios');
 const VERCEL_API_URL = 'https://my-manga-api.vercel.app'; // <-- Update to your Vercel deploy URL
-
 const API_BASE_URL = 'https://api.mangadex.org';
 
-// Map language codes to country flags (expand as needed)
 const LANGUAGE_FLAG_MAP = {
     'ja': '🇯🇵', 'en': '🇺🇸', 'ko': '🇰🇷', 'zh': '🇨🇳', 'zh-hk': '🇭🇰', 'th': '🇹🇭', 'fr': '🇫🇷',
     'it': '🇮🇹', 'es': '🇪🇸', 'pt-br': '🇧🇷', 'de': '🇩🇪', 'ru': '🇷🇺', 'vi': '🇻🇳', 'pl': '🇵🇱',
@@ -16,7 +14,6 @@ function getCountryFlag(lang) {
     return LANGUAGE_FLAG_MAP[lang] || '';
 }
 
-// Given a manga ID, fetch all available language flags for its chapters
 async function getAvailableFlagsForManga(mangaId) {
     try {
         const chaptersRes = await axios({
@@ -26,7 +23,7 @@ async function getAvailableFlagsForManga(mangaId) {
         });
         const chapterLanguages = chaptersRes.data.data
             .map(chap => chap.attributes.translatedLanguage)
-            .filter((v, i, arr) => arr.indexOf(v) === i); // Unique
+            .filter((v, i, arr) => arr.indexOf(v) === i);
         return chapterLanguages.map(getCountryFlag).filter(Boolean);
     } catch (e) {
         return [];
@@ -67,6 +64,7 @@ const fetchList = (orderParams, extraParams = {}) => {
     });
 };
 
+// Main handler for your serverless function
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET');
@@ -82,7 +80,7 @@ module.exports = async (req, res) => {
             fetchList({ followedCount: 'desc' }),            // Featured (could use custom logic)
             fetchList({ relevance: 'desc' }),                // Recommended (could use custom logic)
             fetchList({ year: 'desc' }, { year: 2025, season: 'summer' }), // Seasonal: Summer 2025
-            fetchList({ createdAt: 'desc' }, { publicationDemographic: 'none' }) // Self-Published (demographic: none)
+            fetchList({ createdAt: 'desc' }, { publicationDemographic: 'none' }) // Self-Published
         ]);
 
         res.status(200).json({
