@@ -3,8 +3,22 @@ const VERCEL_API_URL = 'https://my-manga-api.vercel.app'; // Change to your depl
 
 const API_BASE_URL = 'https://api.mangadex.org';
 
-// All English variants for MangaDex
-const ENGLISH_VARIANTS = ['en', 'en-gb', 'en-ca', 'en-au', 'en-nz', 'en-ie', 'en-za', 'en-in'];
+// Prioritize order for English: UK, US, CA, then others
+const ENGLISH_PRIORITY = ['en-gb', 'en', 'en-ca', 'en-au', 'en-nz', 'en-ie', 'en-za', 'en-in', 'en-sg', 'en-hk', 'en-ph', 'en-my', 'en-ng', 'en-pk'];
+
+// All known country/language codes on MangaDex (sample, expand as needed)
+const LANGUAGE_FLAGS = {
+  'en': '🇺🇸', 'en-gb': '🇬🇧', 'en-ca': '🇨🇦', 'en-au': '🇦🇺', 'en-nz': '🇳🇿', 'en-ie': '🇮🇪', 'en-za': '🇿🇦',
+  'es': '🇪🇸', 'es-la': '🇲🇽', 'fr': '🇫🇷', 'de': '🇩🇪', 'it': '🇮🇹', 'pt-br': '🇧🇷', 'ru': '🇷🇺',
+  'ja': '🇯🇵', 'zh': '🇨🇳', 'zh-hk': '🇭🇰', 'zh-tw': '🇹🇼', 'ko': '🇰🇷', 'id': '🇮🇩', 'tr': '🇹🇷',
+  'th': '🇹🇭', 'vi': '🇻🇳', 'ar': '🇸🇦', 'pl': '🇵🇱', 'cs': '🇨🇿', 'nl': '🇳🇱', 'hu': '🇭🇺', 'fi': '🇫🇮',
+  'bg': '🇧🇬', 'uk': '🇺🇦', 'el': '🇬🇷', 'hi': '🇮🇳', 'ta': '🇮🇳', 'ms': '🇲🇾'
+  // ...add more if you want
+};
+
+function getFlag(lang) {
+  return LANGUAGE_FLAGS[lang] || '';
+}
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -35,48 +49,55 @@ module.exports = async (req, res) => {
       },
     });
 
+    // --- Group chapters by chapter number ---
     const chaptersRaw = chapterResponse.data.data;
     const chaptersByNumber = {};
 
     chaptersRaw.forEach(chap => {
       const chapNum = chap.attributes.chapter;
       if (!chapNum) return; // skip if no chapter number
-
-      // Only group chapters that belong to the current manga
       if (!chaptersByNumber[chapNum]) chaptersByNumber[chapNum] = [];
       chaptersByNumber[chapNum].push(chap);
     });
 
-    // For each chapter number, collect all English alternatives
+    // For each chapter number, collect all alternatives by language (sorted for English preference)
     const chapters = Object.keys(chaptersByNumber)
       .sort((a, b) => parseFloat(a) - parseFloat(b))
       .map(chapNum => {
         const group = chaptersByNumber[chapNum];
 
-        // All English alternatives for this chapter
-        const englishAlternatives = group
-          .filter(chap => ENGLISH_VARIANTS.includes(chap.attributes.translatedLanguage) && !!chap.id)
-          .map(chap => ({
-            chapterId: chap.id,
-            chapterTitle: chap.attributes.chapter
-              ? (chap.attributes.title
-                  ? `Chapter ${chap.attributes.chapter}: ${chap.attributes.title}`
-                  : `Chapter ${chap.attributes.chapter}`
-                )
-              : 'Untitled',
-            translatedLanguage: chap.attributes.translatedLanguage || 'EN',
-            groupName: chap.relationships.find(rel => rel.type === 'scanlation_group')?.attributes?.name || '',
-            uploader: chap.relationships.find(rel => rel.type === 'user')?.attributes?.username || ''
-          }));
+        // Sort: English priority first, then others alphabetically
+        const sortedGroup = group.sort((a, b) => {
+          const aLang = (a.attributes.translatedLanguage || '').toLowerCase();
+          const bLang = (b.attributes.translatedLanguage || '').toLowerCase();
+          const aIdx = ENGLISH_PRIORITY.indexOf(aLang);
+          const bIdx = ENGLISH_PRIORITY.indexOf(bLang);
+          if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+          if (aIdx !== -1) return -1;
+          if (bIdx !== -1) return 1;
+          return aLang.localeCompare(bLang);
+        });
+
+        // Make a language alternative for each
+        const allAlternatives = sortedGroup.map(chap => ({
+          chapterId: chap.id,
+          chapterTitle: chap.attributes.chapter
+            ? (chap.attributes.title
+                ? `Chapter ${chap.attributes.chapter}: ${chap.attributes.title}`
+                : `Chapter ${chap.attributes.chapter}`
+              )
+            : 'Untitled',
+          translatedLanguage: chap.attributes.translatedLanguage || '',
+          flag: getFlag((chap.attributes.translatedLanguage || '').toLowerCase()),
+          groupName: chap.relationships.find(rel => rel.type === 'scanlation_group')?.attributes?.name || '',
+          uploader: chap.relationships.find(rel => rel.type === 'user')?.attributes?.username || ''
+        }));
 
         return {
           chapterNumber: chapNum,
-          englishAlternatives
+          alternatives: allAlternatives
         };
-      })
-      // Optional: Only include chapters with at least one English alternative
-      // .filter(chap => chap.englishAlternatives.length > 0)
-      ;
+      });
 
     // --- Cover logic unchanged ---
     const author = manga.relationships.find(rel => rel.type === 'author')?.attributes?.name || 'Unknown';
