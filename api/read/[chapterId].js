@@ -19,18 +19,19 @@ module.exports = async (req, res) => {
       url: `${API_BASE_URL}/at-home/server/${chapterId}`,
     });
 
-    const { baseUrl, chapter: chapterData } = serverResponse.data;
+    const { chapter: chapterData } = serverResponse.data;
     const { hash, data: pageFilenames, dataSaver: pageFilenamesDataSaver } = chapterData;
 
     let pages = pageFilenames;
     let mode = 'data';
+
     if (!pages || pages.length === 0) {
       pages = pageFilenamesDataSaver;
       mode = 'data-saver';
     }
+
     if (!pages) pages = [];
 
-    // Proxy the chapter images via your endpoint
     const imageUrls = pages.map(filename =>
       `${VERCEL_API_URL}/api/proxy-cover?id=${chapterId}&filename=${encodeURIComponent(`${mode}/${hash}/${filename}`)}`
     );
@@ -38,14 +39,14 @@ module.exports = async (req, res) => {
     res.status(200).json({
       title: 'Manga Chapter',
       chapter: chapterId,
-      imageUrls,
+      imageUrls: Array.isArray(imageUrls) ? imageUrls : [],
     });
 
   } catch (error) {
     console.error('MangaDex Chapter API Error:', error.response ? error.response.data.errors : error.message);
     if (error.response && error.response.status === 404) {
-      return res.status(404).json({ message: 'Chapter not found on MangaDex.' });
+      return res.status(404).json({ message: 'Chapter not found on MangaDex.', imageUrls: [] });
     }
-    res.status(500).json({ message: 'Failed to fetch chapter images from MangaDex API.' });
+    res.status(500).json({ message: 'Failed to fetch chapter images from MangaDex API.', imageUrls: [] });
   }
 };
