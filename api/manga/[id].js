@@ -1,3 +1,4 @@
+// Manga detail (with fast preview chapter list, NOT full, for performance)
 const axios = require('axios');
 
 const API_BASE_URL = 'https://api.mangadex.org';
@@ -13,43 +14,26 @@ const LANGUAGE_FLAG_MAP = {
     'sr': '🇷🇸', 'lt': '🇱🇹', 'lv': '🇱🇻', 'et': '🇪🇪', 'hr': '🇭🇷', 'sl': '🇸🇮', 'ca': '🇪🇸',
     'eu': '🇪🇸', 'gl': '🇪🇸', 'ga': '🇮🇪'
 };
-
 function getCountryFlag(lang) {
     return LANGUAGE_FLAG_MAP[lang] || '';
 }
-
-// Fetch all chapters for a manga using pagination
-async function fetchAllChapters(mangaId) {
-    let allChapters = [];
+// Fetch a preview of chapters fast!
+async function fetchPreviewChapters(mangaId, limit=40) {
+    let chapters = [];
     let offset = 0;
-    const limit = 500;
-    let more = true;
-    while (more) {
+    while (chapters.length < limit) {
         const { data } = await axios.get(`${API_BASE_URL}/manga/${mangaId}/feed`, {
             params: {
-                limit,
+                limit: Math.min(500, limit-chapters.length),
                 offset,
                 order: { chapter: 'asc' }
             }
         });
-        allChapters = allChapters.concat(data.data);
+        chapters = chapters.concat(data.data);
+        if (data.data.length < 500) break;
         offset += data.data.length;
-        more = data.data.length === limit;
     }
-    return allChapters;
-}
-
-// Get all language flags for a manga (fetching all chapters)
-async function getAvailableFlagsForManga(mangaId) {
-    try {
-        const chapters = await fetchAllChapters(mangaId);
-        const chapterLanguages = chapters
-            .map(chap => chap.attributes.translatedLanguage)
-            .filter((v, i, arr) => arr.indexOf(v) === i);
-        return chapterLanguages.map(getCountryFlag).filter(Boolean);
-    } catch (e) {
-        return [];
-    }
+    return chapters.slice(0, limit);
 }
 
 module.exports = async (req, res) => {
@@ -66,8 +50,8 @@ module.exports = async (req, res) => {
         });
         const manga = mangaRes.data.data;
 
-        // Fetch all chapters for this manga (pagination)
-        const chaptersRaw = await fetchAllChapters(id);
+        // Fetch preview chapters
+        const chaptersRaw = await fetchPreviewChapters(id, 40);
 
         // Group chapters by chapter number (string)
         const chaptersByNumber = {};
@@ -78,7 +62,7 @@ module.exports = async (req, res) => {
             chaptersByNumber[chapNum].push(chap);
         });
 
-        // For each chapter, collect all language/country variants and flags
+        // For each chapter, collect language/country variants as before
         const chapters = Object.keys(chaptersByNumber)
             .sort((a, b) => {
                 const na = parseFloat(a);
@@ -114,7 +98,6 @@ module.exports = async (req, res) => {
                         };
                     });
 
-                // For frontend: availableCountries is a summary, alternatives is the detailed list
                 const availableCountries = allAlternatives.map(a => ({
                     code: a.translatedLanguage,
                     flag: a.flag
@@ -127,16 +110,12 @@ module.exports = async (req, res) => {
                 };
             });
 
-        // Cover/author logic unchanged
         const author = manga.relationships.find(rel => rel.type === 'author')?.attributes?.name || 'Unknown';
         const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
         const coverFilename = coverArt ? coverArt.attributes.fileName : null;
         const coverImage = coverFilename
             ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
             : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
-
-        // Get all language flags for this manga
-        const flags = await getAvailableFlagsForManga(id);
 
         res.status(200).json({
             id: manga.id,
@@ -146,7 +125,6 @@ module.exports = async (req, res) => {
             genres: manga.attributes.tags.filter(tag => tag.attributes.group === 'genre').map(tag => tag.attributes.name.en),
             description: manga.attributes.description.en || 'No description available.',
             coverImage: coverImage,
-            flags: flags,
             chapters: chapters,
         });
 
