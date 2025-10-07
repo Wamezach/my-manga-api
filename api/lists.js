@@ -1,14 +1,16 @@
 const axios = require('axios');
 
 const API_BASE_URL = 'https://api.mangadex.org';
+const VERCEL_API_URL = 'https://my-manga-api.vercel.app'; // <-- Your deployed proxy root
 
 const processMangaList = (mangaData) => {
     if (!mangaData) return [];
     return mangaData.map(manga => {
         const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
         const coverFilename = coverArt ? coverArt.attributes.fileName : null;
+        // Use your proxy API for covers if available, otherwise fallback to placeholder
         const imgUrl = coverFilename
-            ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
+            ? `${VERCEL_API_URL}/api/proxy-cover?id=${manga.id}&filename=${coverFilename}`
             : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
 
         return {
@@ -27,7 +29,7 @@ const fetchList = (orderParams) => {
             limit: 15,
             'includes[]': ['cover_art'],
             'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
-            hasAvailableChapters: 'true', // Only get manga with chapters
+            hasAvailableChapters: 'true',
             order: orderParams,
         }
     });
