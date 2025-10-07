@@ -5,37 +5,11 @@ const API_BASE_URL = 'https://api.mangadex.org';
 
 // Map language codes to country flags (expand as needed)
 const LANGUAGE_FLAG_MAP = {
-    'ja': '🇯🇵', // Japanese
-    'en': '🇺🇸', // English
-    'ko': '🇰🇷', // Korean
-    'zh': '🇨🇳', // Chinese
-    'zh-hk': '🇭🇰', // Chinese (Hong Kong)
-    'th': '🇹🇭', // Thai
-    'fr': '🇫🇷', // French
-    'it': '🇮🇹', // Italian
-    'es': '🇪🇸', // Spanish
-    'pt-br': '🇧🇷', // Brazilian Portuguese
-    'de': '🇩🇪', // German
-    'ru': '🇷🇺', // Russian
-    'vi': '🇻🇳', // Vietnamese
-    'pl': '🇵🇱', // Polish
-    'tr': '🇹🇷', // Turkish
-    'id': '🇮🇩', // Indonesian
-    'ar': '🇸🇦', // Arabic
-    'uk': '🇺🇦', // Ukrainian
-    'bg': '🇧🇬', // Bulgarian
-    'ms': '🇲🇾', // Malay
-    'fa': '🇮🇷', // Persian
-    'ro': '🇷🇴', // Romanian
-    'hu': '🇭🇺', // Hungarian
-    'el': '🇬🇷', // Greek
-    'cs': '🇨🇿', // Czech
-    'nl': '🇳🇱', // Dutch
-    'sv': '🇸🇪', // Swedish
-    'da': '🇩🇰', // Danish
-    'fi': '🇫🇮', // Finnish
-    'he': '🇮🇱', // Hebrew
-    // ...add more as needed
+    'ja': '🇯🇵', 'en': '🇺🇸', 'ko': '🇰🇷', 'zh': '🇨🇳', 'zh-hk': '🇭🇰', 'th': '🇹🇭', 'fr': '🇫🇷',
+    'it': '🇮🇹', 'es': '🇪🇸', 'pt-br': '🇧🇷', 'de': '🇩🇪', 'ru': '🇷🇺', 'vi': '🇻🇳', 'pl': '🇵🇱',
+    'tr': '🇹🇷', 'id': '🇮🇩', 'ar': '🇸🇦', 'uk': '🇺🇦', 'bg': '🇧🇬', 'ms': '🇲🇾', 'fa': '🇮🇷',
+    'ro': '🇷🇴', 'hu': '🇭🇺', 'el': '🇬🇷', 'cs': '🇨🇿', 'nl': '🇳🇱', 'sv': '🇸🇪', 'da': '🇩🇰',
+    'fi': '🇫🇮', 'he': '🇮🇱'
 };
 
 function getCountryFlag(lang) {
@@ -48,10 +22,7 @@ async function getAvailableFlagsForManga(mangaId) {
         const chaptersRes = await axios({
             method: 'GET',
             url: `${API_BASE_URL}/manga/${mangaId}/feed`,
-            params: {
-                limit: 500,
-                // Remove 'translatedLanguage[]' to get all languages
-            }
+            params: { limit: 500 }
         });
         const chapterLanguages = chaptersRes.data.data
             .map(chap => chap.attributes.translatedLanguage)
@@ -64,7 +35,6 @@ async function getAvailableFlagsForManga(mangaId) {
 
 const processMangaList = async (mangaData) => {
     if (!mangaData) return [];
-    // For each manga, gather flags
     return await Promise.all(mangaData.map(async manga => {
         const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
         const coverFilename = coverArt ? coverArt.attributes.fileName : null;
@@ -77,12 +47,12 @@ const processMangaList = async (mangaData) => {
             id: manga.id,
             title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
             imgUrl: imgUrl,
-            flags: flags // Array of flags for available countries/languages
+            flags: flags
         };
     }));
 };
 
-const fetchList = (orderParams) => {
+const fetchList = (orderParams, extraParams = {}) => {
     return axios({
         method: 'GET',
         url: `${API_BASE_URL}/manga`,
@@ -90,8 +60,9 @@ const fetchList = (orderParams) => {
             limit: 15,
             'includes[]': ['cover_art'],
             'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
-            hasAvailableChapters: 'true', // Only get manga with chapters
+            hasAvailableChapters: 'true',
             order: orderParams,
+            ...extraParams
         }
     });
 };
@@ -102,23 +73,34 @@ module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     try {
-        const [trendingRes, latestRes, newRes] = await Promise.all([
-            fetchList({ followedCount: 'desc' }), // Trending
-            fetchList({ updatedAt: 'desc' }),     // Latest
-            fetchList({ createdAt: 'desc' })      // New
+        // You may adjust the fetchList calls and parameters to fit your backend/data source if needed.
+        const [
+            latestRes, newRes, featuredRes, recommendedRes, seasonalRes, selfPublishedRes
+        ] = await Promise.all([
+            fetchList({ updatedAt: 'desc' }),                // Latest Updates
+            fetchList({ createdAt: 'desc' }),                // Newly Added
+            fetchList({ followedCount: 'desc' }),            // Featured (could use custom logic)
+            fetchList({ relevance: 'desc' }),                // Recommended (could use custom logic)
+            fetchList({ year: 'desc' }, { year: 2025, season: 'summer' }), // Seasonal: Summer 2025
+            fetchList({ createdAt: 'desc' }, { publicationDemographic: 'none' }) // Self-Published (demographic: none)
         ]);
 
         res.status(200).json({
-            trending: await processMangaList(trendingRes.data.data),
+            featured: await processMangaList(featuredRes.data.data),
+            seasonal: await processMangaList(seasonalRes.data.data),
+            "self-published": await processMangaList(selfPublishedRes.data.data),
+            recommended: await processMangaList(recommendedRes.data.data),
             latest: await processMangaList(latestRes.data.data),
-            newlyAdded: await processMangaList(newRes.data.data),
+            newlyAdded: await processMangaList(newRes.data.data)
         });
 
     } catch (error) {
         console.error('MangaDex Lists API Error:', error.response ? error.response.data.errors : error.message);
-        // Always return empty arrays so frontend .map never fails
         res.status(200).json({
-            trending: [],
+            featured: [],
+            seasonal: [],
+            "self-published": [],
+            recommended: [],
             latest: [],
             newlyAdded: [],
             message: 'Failed to fetch lists from MangaDex API.'
