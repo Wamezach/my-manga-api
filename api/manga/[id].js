@@ -1,6 +1,7 @@
 const axios = require('axios');
 
 const API_BASE_URL = 'https://api.mangadex.org';
+const VERCEL_API_URL = 'https://my-manga-api.vercel.app';
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -9,52 +10,36 @@ module.exports = async (req, res) => {
 
   try {
     const { id } = req.query;
+    if (!id) {
+      return res.status(400).json({ message: 'Manga ID is required from the URL path.' });
+    }
 
-    // --- Get Manga Details ---
-    const mangaResponse = await axios({
+    // Manga details
+    const response = await axios({
       method: 'GET',
       url: `${API_BASE_URL}/manga/${id}`,
-      params: {
-        'includes[]': ['cover_art', 'author'],
-      },
+      params: { 'includes[]': ['cover_art'] }
     });
 
-    const manga = mangaResponse.data.data;
-
-    // --- Get Chapter List ---
-    const chapterResponse = await axios({
-        method: 'GET',
-        url: `${API_BASE_URL}/manga/${id}/feed`,
-        params: {
-            limit: 500, // Get up to 500 chapters
-            order: { chapter: 'asc' }, // Order by chapter number, ascending
-            'translatedLanguage[]': ['en'] // Only get English chapters
-        }
-    });
-
-    // --- Process the Data ---
-    const author = manga.relationships.find(rel => rel.type === 'author')?.attributes.name || 'Unknown';
+    const manga = response.data.data;
     const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
-    const coverImage = `https://uploads.mangadex.org/covers/${manga.id}/${coverArt.attributes.fileName}`;
-    
-    const chapters = chapterResponse.data.data.map(chap => ({
-        chapterId: chap.id,
-        chapterTitle: `Chapter ${chap.attributes.chapter}` + (chap.attributes.title ? `: ${chap.attributes.title}`: '')
-    }));
+    const coverFilename = coverArt ? coverArt.attributes.fileName : null;
+    const imgUrl = coverFilename
+      ? `${VERCEL_API_URL}/api/proxy-cover?id=${id}&filename=${encodeURIComponent(coverFilename)}`
+      : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
 
     res.status(200).json({
       id: manga.id,
       title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
-      author: author,
-      status: manga.attributes.status,
-      genres: manga.attributes.tags.filter(tag => tag.attributes.group === 'genre').map(tag => tag.attributes.name.en),
-      description: manga.attributes.description.en || 'No description available.',
-      coverImage: coverImage,
-      chapters: chapters,
+      imgUrl,
+      attributes: manga.attributes,
     });
 
   } catch (error) {
-    console.error('MangaDex API Error:', error.response ? error.response.data : error.message);
+    console.error('MangaDex Manga API Error:', error.response ? error.response.data.errors : error.message);
+    if (error.response && error.response.status === 404) {
+      return res.status(404).json({ message: 'Manga not found on MangaDex.' });
+    }
     res.status(500).json({ message: 'Failed to fetch manga details from MangaDex API.' });
   }
 };
