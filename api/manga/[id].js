@@ -3,21 +3,31 @@ const VERCEL_API_URL = 'https://my-manga-api.vercel.app'; // Change to your depl
 
 const API_BASE_URL = 'https://api.mangadex.org';
 
-// Prioritize order for English: UK, US, CA, then others
-const ENGLISH_PRIORITY = ['en-gb', 'en', 'en-ca', 'en-au', 'en-nz', 'en-ie', 'en-za', 'en-in', 'en-sg', 'en-hk', 'en-ph', 'en-my', 'en-ng', 'en-pk'];
-
-// All known country/language codes on MangaDex (sample, expand as needed)
-const LANGUAGE_FLAGS = {
-  'en': '🇺🇸', 'en-gb': '🇬🇧', 'en-ca': '🇨🇦', 'en-au': '🇦🇺', 'en-nz': '🇳🇿', 'en-ie': '🇮🇪', 'en-za': '🇿🇦',
-  'es': '🇪🇸', 'es-la': '🇲🇽', 'fr': '🇫🇷', 'de': '🇩🇪', 'it': '🇮🇹', 'pt-br': '🇧🇷', 'ru': '🇷🇺',
-  'ja': '🇯🇵', 'zh': '🇨🇳', 'zh-hk': '🇭🇰', 'zh-tw': '🇹🇼', 'ko': '🇰🇷', 'id': '🇮🇩', 'tr': '🇹🇷',
-  'th': '🇹🇭', 'vi': '🇻🇳', 'ar': '🇸🇦', 'pl': '🇵🇱', 'cs': '🇨🇿', 'nl': '🇳🇱', 'hu': '🇭🇺', 'fi': '🇫🇮',
-  'bg': '🇧🇬', 'uk': '🇺🇦', 'el': '🇬🇷', 'hi': '🇮🇳', 'ta': '🇮🇳', 'ms': '🇲🇾'
-  // ...add more if you want
+// Country flags and names for popular languages/variants
+const LANGUAGE_META = {
+  'en':   { flag: '🇺🇸', country: 'United States' },
+  'en-gb':{ flag: '🇬🇧', country: 'United Kingdom' },
+  'en-ca':{ flag: '🇨🇦', country: 'Canada' },
+  'en-au':{ flag: '🇦🇺', country: 'Australia' },
+  'en-nz':{ flag: '🇳🇿', country: 'New Zealand' },
+  'zh':   { flag: '🇨🇳', country: 'China' },
+  'zh-hk':{ flag: '🇭🇰', country: 'Hong Kong' },
+  'zh-tw':{ flag: '🇹🇼', country: 'Taiwan' },
+  'ja':   { flag: '🇯🇵', country: 'Japan' },
+  'es':   { flag: '🇪🇸', country: 'Spain' },
+  'es-la':{ flag: '🇲🇽', country: 'Latin America' },
+  'fr':   { flag: '🇫🇷', country: 'France' },
+  'de':   { flag: '🇩🇪', country: 'Germany' },
+  'ru':   { flag: '🇷🇺', country: 'Russia' },
+  'it':   { flag: '🇮🇹', country: 'Italy' },
+  'pt-br':{ flag: '🇧🇷', country: 'Brazil' },
+  'ko':   { flag: '🇰🇷', country: 'Korea' },
+  // Add more as needed
 };
 
-function getFlag(lang) {
-  return LANGUAGE_FLAGS[lang] || '';
+function getLangMeta(lang) {
+  let l = (lang || '').toLowerCase();
+  return LANGUAGE_META[l] || { flag: '', country: l.toUpperCase() };
 }
 
 module.exports = async (req, res) => {
@@ -32,9 +42,7 @@ module.exports = async (req, res) => {
     const mangaResponse = await axios({
       method: 'GET',
       url: `${API_BASE_URL}/manga/${id}`,
-      params: {
-        'includes[]': ['cover_art', 'author'],
-      },
+      params: { 'includes[]': ['cover_art', 'author'] },
     });
 
     const manga = mangaResponse.data.data;
@@ -43,59 +51,62 @@ module.exports = async (req, res) => {
     const chapterResponse = await axios({
       method: 'GET',
       url: `${API_BASE_URL}/manga/${id}/feed`,
-      params: {
-        limit: 500,
-        order: { chapter: 'asc' },
-      },
+      params: { limit: 500, order: { chapter: 'asc' } },
     });
 
-    // --- Group chapters by chapter number ---
     const chaptersRaw = chapterResponse.data.data;
     const chaptersByNumber = {};
 
     chaptersRaw.forEach(chap => {
       const chapNum = chap.attributes.chapter;
-      if (!chapNum) return; // skip if no chapter number
+      if (!chapNum) return;
       if (!chaptersByNumber[chapNum]) chaptersByNumber[chapNum] = [];
       chaptersByNumber[chapNum].push(chap);
     });
 
-    // For each chapter number, collect all alternatives by language (sorted for English preference)
+    // For each chapter, collect all language/country variants (sorted: EN first, then code order)
     const chapters = Object.keys(chaptersByNumber)
       .sort((a, b) => parseFloat(a) - parseFloat(b))
       .map(chapNum => {
         const group = chaptersByNumber[chapNum];
+        const allAlternatives = group
+          .sort((a, b) => {
+            const la = (a.attributes.translatedLanguage || '').toLowerCase();
+            const lb = (b.attributes.translatedLanguage || '').toLowerCase();
+            // EN/EN-gb always first
+            if (la.startsWith('en') && !lb.startsWith('en')) return -1;
+            if (!la.startsWith('en') && lb.startsWith('en')) return 1;
+            return la.localeCompare(lb);
+          })
+          .map(chap => {
+            const lang = (chap.attributes.translatedLanguage || '').toLowerCase();
+            const meta = getLangMeta(lang);
+            return {
+              chapterId: chap.id,
+              chapterTitle: chap.attributes.chapter
+                ? (chap.attributes.title
+                  ? `Chapter ${chap.attributes.chapter}: ${chap.attributes.title}`
+                  : `Chapter ${chap.attributes.chapter}`)
+                : 'Untitled',
+              translatedLanguage: lang,
+              flag: meta.flag,
+              country: meta.country,
+              groupName: chap.relationships.find(rel => rel.type === 'scanlation_group')?.attributes?.name || '',
+              uploader: chap.relationships.find(rel => rel.type === 'user')?.attributes?.username || ''
+            };
+          });
 
-        // Sort: English priority first, then others alphabetically
-        const sortedGroup = group.sort((a, b) => {
-          const aLang = (a.attributes.translatedLanguage || '').toLowerCase();
-          const bLang = (b.attributes.translatedLanguage || '').toLowerCase();
-          const aIdx = ENGLISH_PRIORITY.indexOf(aLang);
-          const bIdx = ENGLISH_PRIORITY.indexOf(bLang);
-          if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
-          if (aIdx !== -1) return -1;
-          if (bIdx !== -1) return 1;
-          return aLang.localeCompare(bLang);
-        });
-
-        // Make a language alternative for each
-        const allAlternatives = sortedGroup.map(chap => ({
-          chapterId: chap.id,
-          chapterTitle: chap.attributes.chapter
-            ? (chap.attributes.title
-                ? `Chapter ${chap.attributes.chapter}: ${chap.attributes.title}`
-                : `Chapter ${chap.attributes.chapter}`
-              )
-            : 'Untitled',
-          translatedLanguage: chap.attributes.translatedLanguage || '',
-          flag: getFlag((chap.attributes.translatedLanguage || '').toLowerCase()),
-          groupName: chap.relationships.find(rel => rel.type === 'scanlation_group')?.attributes?.name || '',
-          uploader: chap.relationships.find(rel => rel.type === 'user')?.attributes?.username || ''
+        // Only return the list of available languages/countries for this chapter
+        const availableCountries = allAlternatives.map(a => ({
+          code: a.translatedLanguage,
+          flag: a.flag,
+          country: a.country,
         }));
 
         return {
           chapterNumber: chapNum,
-          alternatives: allAlternatives
+          availableCountries,
+          alternatives: allAlternatives // you can use this for clickable chapter buttons
         };
       });
 
