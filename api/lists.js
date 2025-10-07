@@ -1,55 +1,41 @@
 const axios = require('axios');
-const VERCEL_API_URL = 'https://my-manga-api.vercel.app'; // <-- Update to your Vercel deploy URL
+
 const API_BASE_URL = 'https://api.mangadex.org';
 
+// Map language codes to country flags (expanded)
 const LANGUAGE_FLAG_MAP = {
-    'ja': '🇯🇵', 'en': '🇺🇸', 'ko': '🇰🇷', 'zh': '🇨🇳', 'zh-hk': '🇭🇰', 'th': '🇹🇭', 'fr': '🇫🇷',
-    'it': '🇮🇹', 'es': '🇪🇸', 'pt-br': '🇧🇷', 'de': '🇩🇪', 'ru': '🇷🇺', 'vi': '🇻🇳', 'pl': '🇵🇱',
+    'ja': '🇯🇵', 'en': '🇺🇸', 'en-gb': '🇬🇧', 'en-ca': '🇨🇦', 'en-au': '🇦🇺', 'en-nz': '🇳🇿',
+    'ko': '🇰🇷', 'zh': '🇨🇳', 'zh-hk': '🇭🇰', 'zh-tw': '🇹🇼', 'th': '🇹🇭', 'fr': '🇫🇷', 'it': '🇮🇹',
+    'es': '🇪🇸', 'es-la': '🇲🇽', 'pt-br': '🇧🇷', 'de': '🇩🇪', 'ru': '🇷🇺', 'vi': '🇻🇳', 'pl': '🇵🇱',
     'tr': '🇹🇷', 'id': '🇮🇩', 'ar': '🇸🇦', 'uk': '🇺🇦', 'bg': '🇧🇬', 'ms': '🇲🇾', 'fa': '🇮🇷',
     'ro': '🇷🇴', 'hu': '🇭🇺', 'el': '🇬🇷', 'cs': '🇨🇿', 'nl': '🇳🇱', 'sv': '🇸🇪', 'da': '🇩🇰',
-    'fi': '🇫🇮', 'he': '🇮🇱'
+    'fi': '🇫🇮', 'he': '🇮🇱', 'hi': '🇮🇳', 'ta': '🇮🇳', 'bn': '🇧🇩', 'no': '🇳🇴', 'sk': '🇸🇰',
+    'sr': '🇷🇸', 'lt': '🇱🇹', 'lv': '🇱🇻', 'et': '🇪🇪', 'hr': '🇭🇷', 'sl': '🇸🇮', 'ca': '🇪🇸',
+    'eu': '🇪🇸', 'gl': '🇪🇸', 'ga': '🇮🇪'
 };
 
 function getCountryFlag(lang) {
     return LANGUAGE_FLAG_MAP[lang] || '';
 }
 
-async function getAvailableFlagsForManga(mangaId) {
-    try {
-        const chaptersRes = await axios({
-            method: 'GET',
-            url: `${API_BASE_URL}/manga/${mangaId}/feed`,
-            params: { limit: 500 }
-        });
-        const chapterLanguages = chaptersRes.data.data
-            .map(chap => chap.attributes.translatedLanguage)
-            .filter((v, i, arr) => arr.indexOf(v) === i);
-        return chapterLanguages.map(getCountryFlag).filter(Boolean);
-    } catch (e) {
-        return [];
-    }
-}
-
-const processMangaList = async (mangaData) => {
+const processMangaList = (mangaData) => {
     if (!mangaData) return [];
-    return await Promise.all(mangaData.map(async manga => {
+    return mangaData.map(manga => {
         const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
         const coverFilename = coverArt ? coverArt.attributes.fileName : null;
         const imgUrl = coverFilename
-            ? `${VERCEL_API_URL}/api/proxy-cover?id=${manga.id}&filename=${encodeURIComponent(coverFilename + '.512.jpg')}`
+            ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFilename}.512.jpg`
             : 'https://via.placeholder.com/512/1f2937/d1d5db.png?text=No+Cover';
-        const flags = await getAvailableFlagsForManga(manga.id);
 
         return {
             id: manga.id,
             title: manga.attributes.title.en || Object.values(manga.attributes.title)[0],
             imgUrl: imgUrl,
-            flags: flags
         };
-    }));
+    });
 };
 
-const fetchList = (orderParams, extraParams = {}) => {
+const fetchList = (orderParams) => {
     return axios({
         method: 'GET',
         url: `${API_BASE_URL}/manga`,
@@ -57,39 +43,35 @@ const fetchList = (orderParams, extraParams = {}) => {
             limit: 15,
             'includes[]': ['cover_art'],
             'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
-            hasAvailableChapters: 'true',
+            hasAvailableChapters: 'true', // Only get manga with chapters
             order: orderParams,
-            ...extraParams
         }
     });
 };
 
-// Main handler for your serverless function
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     try {
-        // You may adjust the fetchList calls and parameters to fit your backend/data source if needed.
-        const [
-            latestRes, newRes, featuredRes, recommendedRes, seasonalRes, selfPublishedRes
-        ] = await Promise.all([
-            fetchList({ updatedAt: 'desc' }),                // Latest Updates
-            fetchList({ createdAt: 'desc' }),                // Newly Added
-            fetchList({ followedCount: 'desc' }),            // Featured (could use custom logic)
-            fetchList({ relevance: 'desc' }),                // Recommended (could use custom logic)
-            fetchList({ year: 'desc' }, { year: 2025, season: 'summer' }), // Seasonal: Summer 2025
-            fetchList({ createdAt: 'desc' }, { publicationDemographic: 'none' }) // Self-Published
+        // You can add or remove fetchList calls for new sections as needed
+        const [latestRes, newRes, featuredRes, recommendedRes, seasonalRes, selfPublishedRes] = await Promise.all([
+            fetchList({ updatedAt: 'desc' }),          // Latest Updates
+            fetchList({ createdAt: 'desc' }),          // Newly Added
+            fetchList({ followedCount: 'desc' }),      // Featured (popular)
+            fetchList({ relevance: 'desc' }),          // Recommended (loosely, or adjust as needed)
+            fetchList({ year: 'desc' }),               // Seasonal (placeholder, can refine params)
+            fetchList({ createdAt: 'desc' })           // Self-Published (placeholder, can refine params)
         ]);
 
         res.status(200).json({
-            featured: await processMangaList(featuredRes.data.data),
-            seasonal: await processMangaList(seasonalRes.data.data),
-            "self-published": await processMangaList(selfPublishedRes.data.data),
-            recommended: await processMangaList(recommendedRes.data.data),
-            latest: await processMangaList(latestRes.data.data),
-            newlyAdded: await processMangaList(newRes.data.data)
+            featured: processMangaList(featuredRes.data.data),
+            seasonal: processMangaList(seasonalRes.data.data),
+            "self-published": processMangaList(selfPublishedRes.data.data),
+            recommended: processMangaList(recommendedRes.data.data),
+            latest: processMangaList(latestRes.data.data),
+            newlyAdded: processMangaList(newRes.data.data)
         });
 
     } catch (error) {
