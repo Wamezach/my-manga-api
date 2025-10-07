@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const VERCEL_API_URL = 'https://my-manga-api.vercel.app'; // Replace with your Vercel deployment URL
+const VERCEL_API_URL = 'https://my-manga-api.vercel.app';
 const API_BASE_URL = 'https://api.mangadex.org';
 
 module.exports = async (req, res) => {
@@ -24,17 +24,13 @@ module.exports = async (req, res) => {
 
     let pages = pageFilenames;
     let mode = 'data';
-
     if (!pages || pages.length === 0) {
       pages = pageFilenamesDataSaver;
       mode = 'data-saver';
     }
+    if (!pages) pages = [];
 
-    if (!pages) {
-      pages = [];
-    }
-
-    // Use proxy-cover.js for chapter images
+    // Proxy the chapter images via your endpoint
     const imageUrls = pages.map(filename =>
       `${VERCEL_API_URL}/api/proxy-cover?id=${chapterId}&filename=${encodeURIComponent(`${mode}/${hash}/${filename}`)}`
     );
@@ -42,7 +38,7 @@ module.exports = async (req, res) => {
     res.status(200).json({
       title: 'Manga Chapter',
       chapter: chapterId,
-      imageUrls: imageUrls,
+      imageUrls,
     });
 
   } catch (error) {
