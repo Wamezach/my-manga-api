@@ -1,9 +1,8 @@
 const axios = require('axios');
 const VERCEL_API_URL = 'https://my-manga-api.vercel.app'; // Change to your deploy URL
-
 const API_BASE_URL = 'https://api.mangadex.org';
 
-// Country flags and names for popular languages/variants
+// Map language codes to flags and country names for display
 const LANGUAGE_META = {
   'en':   { flag: '🇺🇸', country: 'United States' },
   'en-gb':{ flag: '🇬🇧', country: 'United Kingdom' },
@@ -22,7 +21,16 @@ const LANGUAGE_META = {
   'it':   { flag: '🇮🇹', country: 'Italy' },
   'pt-br':{ flag: '🇧🇷', country: 'Brazil' },
   'ko':   { flag: '🇰🇷', country: 'Korea' },
-  // Add more as needed
+  'pl':   { flag: '🇵🇱', country: 'Poland' },
+  'ar':   { flag: '🇸🇦', country: 'Arabic' },
+  'tr':   { flag: '🇹🇷', country: 'Turkey' },
+  'id':   { flag: '🇮🇩', country: 'Indonesia' },
+  'ro':   { flag: '🇷🇴', country: 'Romania' },
+  'vi':   { flag: '🇻🇳', country: 'Vietnam' },
+  'uk':   { flag: '🇺🇦', country: 'Ukraine' },
+  'th':   { flag: '🇹🇭', country: 'Thailand' },
+  'br':   { flag: '🇧🇷', country: 'Brazil' }
+  // Add more if needed
 };
 
 function getLangMeta(lang) {
@@ -30,7 +38,7 @@ function getLangMeta(lang) {
   return LANGUAGE_META[l] || { flag: '', country: l.toUpperCase() };
 }
 
-// Helper: fetch all chapters with pagination
+// Fetch all chapters with pagination
 async function fetchAllChapters(id) {
   let all = [];
   let offset = 0;
@@ -62,7 +70,7 @@ module.exports = async (req, res) => {
   try {
     const { id } = req.query;
 
-    // --- Get Manga Details ---
+    // Get Manga Details
     const mangaResponse = await axios({
       method: 'GET',
       url: `${API_BASE_URL}/manga/${id}`,
@@ -70,10 +78,10 @@ module.exports = async (req, res) => {
     });
     const manga = mangaResponse.data.data;
 
-    // --- Get ALL Chapter List (all languages, all pages) ---
+    // Get all chapters (all pages)
     const chaptersRaw = await fetchAllChapters(id);
 
-    // --- Group chapters by chapter number ---
+    // Group chapters by chapter number (as string)
     const chaptersByNumber = {};
     chaptersRaw.forEach(chap => {
       const chapNum = chap.attributes.chapter;
@@ -82,9 +90,17 @@ module.exports = async (req, res) => {
       chaptersByNumber[chapNum].push(chap);
     });
 
-    // For each chapter, collect all language/country variants (sorted: EN first, then code order)
+    // For each chapter, collect all language/country variants
     const chapters = Object.keys(chaptersByNumber)
-      .sort((a, b) => parseFloat(a) - parseFloat(b))
+      .sort((a, b) => {
+        // Handle decimal and special chapters gracefully (e.g. 1, 1.5, 2, 10, "A", etc.)
+        const na = parseFloat(a);
+        const nb = parseFloat(b);
+        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        if (!isNaN(na)) return -1;
+        if (!isNaN(nb)) return 1;
+        return a.localeCompare(b);
+      })
       .map(chapNum => {
         const group = chaptersByNumber[chapNum];
         const allAlternatives = group
@@ -114,7 +130,7 @@ module.exports = async (req, res) => {
             };
           });
 
-        // Only return the list of available languages/countries for this chapter
+        // For frontend: availableCountries is a summary, alternatives is the detailed list
         const availableCountries = allAlternatives.map(a => ({
           code: a.translatedLanguage,
           flag: a.flag,
@@ -124,11 +140,11 @@ module.exports = async (req, res) => {
         return {
           chapterNumber: chapNum,
           availableCountries,
-          alternatives: allAlternatives // you can use this for clickable chapter buttons
+          alternatives: allAlternatives
         };
       });
 
-    // --- Cover logic unchanged ---
+    // Cover/author logic unchanged
     const author = manga.relationships.find(rel => rel.type === 'author')?.attributes?.name || 'Unknown';
     const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
     const coverFilename = coverArt ? coverArt.attributes.fileName : null;
@@ -148,7 +164,7 @@ module.exports = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('MangaDex API Error:', error.response ? JSON.stringify(error.response.data) : error.message);
-    res.status(500).json({ message: 'Failed to fetch manga details from MangaDex API.' });
+    console.error('MangaDex API Error:', error.response ? JSON.stringify(error.response.data) : error.message, error.stack);
+    res.status(500).json({ message: 'Failed to fetch manga details from MangaDex API.', error: error.response ? error.response.data : error.message });
   }
 };
