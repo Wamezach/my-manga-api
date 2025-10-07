@@ -15,49 +15,60 @@ module.exports = async (req, res) => {
       return res.status(400).json({ message: 'Chapter ID is required from the URL path.', imageUrls: [] });
     }
 
-    const serverResponse = await axios({
-      method: 'GET',
-      url: `${API_BASE_URL}/at-home/server/${chapterId}`,
-    });
+    let serverResponse;
+    try {
+      serverResponse = await axios({
+        method: 'GET',
+        url: `${API_BASE_URL}/at-home/server/${chapterId}`,
+      });
+    } catch (err) {
+      // API error: return empty array but include error message
+      return res.status(200).json({
+        title: 'Manga Chapter',
+        chapter: chapterId,
+        imageUrls: [],
+        message: err.response?.data?.errors?.[0]?.detail || 'Failed to fetch chapter images from MangaDex API.',
+        error: true,
+      });
+    }
 
-    const { baseUrl, chapter: chapterData } = serverResponse.data;
-    const hash = chapterData?.hash;
-    const pageFilenames = chapterData?.data || [];
-    const pageFilenamesDataSaver = chapterData?.dataSaver || [];
+    const chapterData = serverResponse?.data?.chapter || {};
+    const hash = chapterData.hash || '';
+    const pageFilenames = Array.isArray(chapterData.data) ? chapterData.data : [];
+    const pageFilenamesDataSaver = Array.isArray(chapterData.dataSaver) ? chapterData.dataSaver : [];
 
     let pages = pageFilenames;
     let mode = 'data';
 
-    // If the high-quality 'data' list is empty or doesn't exist, try the 'data-saver' list.
-    if (!pages || pages.length === 0) {
+    if (!pages.length) {
       pages = pageFilenamesDataSaver;
       mode = 'data-saver';
     }
 
-    // If BOTH lists are empty, set to empty array
-    if (!pages || !Array.isArray(pages)) {
+    // FINAL: Ensure pages is always an array
+    if (!Array.isArray(pages)) {
       pages = [];
     }
 
-    // Use proxy for chapter images
-    const imageUrls = Array.isArray(pages)
-      ? pages.map(filename => `${VERCEL_API_URL}/api/proxy-cover?id=${chapterId}&filename=${encodeURIComponent(`${mode}/${hash}/${filename}`)}`)
-      : [];
+    const imageUrls = pages.map(filename =>
+      `${VERCEL_API_URL}/api/proxy-cover?id=${chapterId}&filename=${encodeURIComponent(`${mode}/${hash}/${filename}`)}`
+    );
 
     res.status(200).json({
       title: 'Manga Chapter',
       chapter: chapterId,
-      imageUrls: imageUrls,
+      imageUrls,
+      error: false,
     });
 
   } catch (error) {
     console.error('MangaDex Chapter API Error:', error.response ? error.response.data.errors : error.message);
-    // Always return imageUrls array (even empty) for frontend safety
     res.status(200).json({
       title: 'Manga Chapter',
       chapter: req.query.chapterId,
       imageUrls: [],
       message: 'Failed to fetch chapter images from MangaDex API.',
+      error: true,
     });
   }
 };
