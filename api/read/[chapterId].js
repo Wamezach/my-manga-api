@@ -12,7 +12,7 @@ module.exports = async (req, res) => {
     const { chapterId } = req.query;
 
     if (!chapterId) {
-      return res.status(400).json({ message: 'Chapter ID is required from the URL path.' });
+      return res.status(400).json({ message: 'Chapter ID is required from the URL path.', imageUrls: [] });
     }
 
     const serverResponse = await axios({
@@ -21,7 +21,9 @@ module.exports = async (req, res) => {
     });
 
     const { baseUrl, chapter: chapterData } = serverResponse.data;
-    const { hash, data: pageFilenames, dataSaver: pageFilenamesDataSaver } = chapterData;
+    const hash = chapterData?.hash;
+    const pageFilenames = chapterData?.data || [];
+    const pageFilenamesDataSaver = chapterData?.dataSaver || [];
 
     let pages = pageFilenames;
     let mode = 'data';
@@ -32,16 +34,15 @@ module.exports = async (req, res) => {
       mode = 'data-saver';
     }
 
-    // FINAL FIX: If BOTH lists are empty, create an empty array to prevent errors.
-    if (!pages) {
+    // If BOTH lists are empty, set to empty array
+    if (!pages || !Array.isArray(pages)) {
       pages = [];
     }
 
     // Use proxy for chapter images
-    const imageUrls = pages.map(filename => {
-      // The proxy expects: /api/proxy-cover?id=<chapterId>&filename=<mode>/<hash>/<filename>
-      return `${VERCEL_API_URL}/api/proxy-cover?id=${chapterId}&filename=${encodeURIComponent(`${mode}/${hash}/${filename}`)}`;
-    });
+    const imageUrls = Array.isArray(pages)
+      ? pages.map(filename => `${VERCEL_API_URL}/api/proxy-cover?id=${chapterId}&filename=${encodeURIComponent(`${mode}/${hash}/${filename}`)}`)
+      : [];
 
     res.status(200).json({
       title: 'Manga Chapter',
